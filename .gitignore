@@ -1,5 +1,6 @@
 .terraform/
 *.tfstate
 *.tfstate.*
+*.tfplan
+backend.hcl
 crash.log
-.terraform.lock.hcl

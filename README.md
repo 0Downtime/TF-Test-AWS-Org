@@ -1,70 +1,72 @@
-# TEST AWS Organization Baseline
+# AWS Organization baseline
 
-This Terraform configuration provisions an AWS Organizations management account baseline with:
+This repository is a staged deployment for the architecture in the reference diagram:
 
-- AWS Organizations
-- CloudTrail
-- IAM Identity Center / SSO permission set
-- Preparatory OUs for Security, Infrastructure, and Workloads
-- Accounts for Log Archive (in the Security OU), and Production (in the Workloads OU)
-- Secrets Manager and appropriate IAM policies in the Production account
-- S3 bucket for CloudTrail logs in the Log Archive account
-- IAM policies for billing access in the root account
+- management account with AWS Organizations and trusted service access
+- Security, Infrastructure, and Workloads organizational units
+- log-archive account under Security
+- production account under Workloads
+- organization-wide CloudTrail delivered to the log-archive account
+- IAM Identity Center permission sets with optional group assignments
+- an empty, protected Secrets Manager secret in the production account
 
-## Organization Diagram
+The stages are intentional. Account creation and cross-account role assumption are separate operations in AWS, so child-account resources are not placed in the same Terraform state as account creation.
 
-```mermaid
-flowchart TD
-    Root["Management Account<br/>Root"] --> Org["AWS Organizations"]
-    Root --> CT["CloudTrail"]
-    Root --> SSO["IAM Identity Center / SSO"]
-    Root --> Billing["Billing IAM role/policy"]
+## Before deployment
 
-    Root --> SecOU["Security OU"]
-    SecOU --> LogArchive["log-archive account"]
-    LogArchive --> LogBucket["S3 bucket for audit logs"]
+1. Decide whether the management account already owns an AWS Organization. For an existing organization, import and review the organization resource rather than creating a second organization.
+2. Create an encrypted, versioned remote Terraform state bucket outside these stacks. Configure an S3 backend per stage using `-backend-config`; the backend cannot be created by the state that depends on it.
+3. Prepare two unique, valid root-email addresses for the member accounts.
+4. Enable an organization instance of IAM Identity Center in the region you will use for SSO. Create an administrative group and record its identity-store group ID if you want Terraform to assign access.
 
-    Root --> InfraOU["Infrastructure OU"]
-    InfraOU --> Shared["shared-services account (planned)"]
+## Deployment
 
-    Root --> WorkloadsOU["Workloads OU"]
-    WorkloadsOU --> Prod["production account"]
-    Prod --> Secrets["Secrets Manager secret"]
-    Prod --> ProdRole["IAM role/policy<br/>Secrets Manager RW"]
+Run each stage from its own directory and state. Use the same management-account profile for all stages; the cross-account providers use that profile as their source credentials.
+
+```bash
+cd stages/01-organization
+cp terraform.tfvars.example terraform.tfvars
+# Edit terraform.tfvars with real unique account emails.
+terraform init -backend-config=backend.hcl
+terraform plan
+terraform apply
+terraform output
 ```
 
+Create `backend.hcl` in each stage by copying its `backend.hcl.example` and setting the actual state bucket name. The state bucket must already exist, have versioning enabled, and be restricted to the Terraform operators.
 
-## Prerequisites
+Wait for both member accounts to finish provisioning and verify that `OrganizationAccountAccessRole` can be assumed. Then configure the account IDs in the next stage:
 
-- A brand-new AWS account that will become the management account
-- AWS credentials for that account (preferably the root user or a highly privileged admin role)
-- Terraform 1.5+
+```bash
+cd ../02-governance
+cp terraform.tfvars.example terraform.tfvars
+# Set organization_id, management_account_id, and log_archive_account_id.
+terraform init -backend-config=backend.hcl
+terraform plan
+terraform apply
+```
 
-## Usage
+Finally deploy the production-account baseline:
 
-1. Set your AWS credentials:
-   ```bash
-   export AWS_PROFILE=your-profile
-   # or export AWS_ACCESS_KEY_ID=... AWS_SECRET_ACCESS_KEY=...
-   ```
+```bash
+cd ../03-production
+cp terraform.tfvars.example terraform.tfvars
+# Set production_account_id.
+terraform init -backend-config=backend.hcl
+terraform plan
+terraform apply
+```
 
-2. Initialize Terraform:
-   ```bash
-   terraform init
-   ```
+Do not commit `terraform.tfvars` or backend credentials. Review every plan, especially changes to the organization, account parents, CloudTrail bucket policy, IAM Identity Center assignments, and the protected log bucket.
 
-3. Review the plan:
-   ```bash
-   terraform plan
-   ```
+## Validation
 
-4. Apply the configuration:
-   ```bash
-   terraform apply
-   ```
-
-## Notes
-
-- Creating an AWS Organization is a one-time operation for the management account.
-- The Terraform configuration assumes you are running it from the account that should become the management account.
-- The S3 bucket name for audit logs must be globally unique; adjust the default if needed.
+```bash
+terraform fmt -check -recursive
+terraform -chdir=stages/01-organization init -backend=false
+terraform -chdir=stages/01-organization validate
+terraform -chdir=stages/02-governance init -backend=false
+terraform -chdir=stages/02-governance validate
+terraform -chdir=stages/03-production init -backend=false
+terraform -chdir=stages/03-production validate
+```
