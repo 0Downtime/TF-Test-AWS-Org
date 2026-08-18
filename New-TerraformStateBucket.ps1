@@ -10,9 +10,20 @@ $env:AWS_PAGER = ""
 function Invoke-Aws {
     param([string[]]$Arguments)
 
-    $output = & aws @Arguments 2>&1
+    # PowerShell 7 can turn native-command stderr into a terminating error.
+    # Keep it in the captured output so the AWS CLI message is visible below.
+    $previousNativePreference = $PSNativeCommandUseErrorActionPreference
+    $PSNativeCommandUseErrorActionPreference = $false
 
-    if ($LASTEXITCODE -ne 0) {
+    try {
+        $output = & aws @Arguments 2>&1
+        $exitCode = $LASTEXITCODE
+    }
+    finally {
+        $PSNativeCommandUseErrorActionPreference = $previousNativePreference
+    }
+
+    if ($exitCode -ne 0) {
         throw "AWS CLI failed:`n$($output -join "`n")"
     }
 
