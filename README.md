@@ -15,13 +15,26 @@ The stages are intentional. Account creation and cross-account role assumption a
 ## Before deployment
 
 1. Decide whether the management account already owns an AWS Organization. For an existing organization, import and review the organization resource rather than creating a second organization.
-2. Create an encrypted, versioned remote Terraform state bucket outside these stacks. Configure an S3 backend per stage using `-backend-config`; the backend cannot be created by the state that depends on it.
-3. Prepare two unique, valid root-email addresses for the member accounts.
-4. Enable an organization instance of IAM Identity Center in the region you will use for SSO. Create an administrative group and record its identity-store group ID if you want Terraform to assign access.
+2. Prepare two unique, valid root-email addresses for the member accounts.
+3. Enable an organization instance of IAM Identity Center in the region you will use for SSO. Create an administrative group and record its identity-store group ID if you want Terraform to assign access.
 
 ## Deployment
 
-Run each stage from its own directory and state. Use the same management-account profile for all stages; the cross-account providers use that profile as their source credentials.
+Run each stage from its own directory and state. Stage 00 uses local state because it creates the remote backend used by the later stages. Use the same management-account profile for all stages; the cross-account providers use that profile as their source credentials.
+
+First create the Terraform state bucket:
+
+```powershell
+cd stages/00-state-bucket
+Copy-Item terraform.tfvars.example terraform.tfvars
+notepad terraform.tfvars
+terraform init
+terraform plan -out=tfplan
+terraform apply tfplan
+terraform output
+```
+
+Choose any globally unique lowercase S3 bucket name in `terraform.tfvars`.
 
 ```bash
 cd stages/01-organization
@@ -33,7 +46,7 @@ terraform apply
 terraform output
 ```
 
-Create `backend.hcl` in each stage by copying its `backend.hcl.example` and setting the actual state bucket name. The state bucket must already exist, have versioning enabled, and be restricted to the Terraform operators.
+Create `backend.hcl` in each stage by copying its `backend.hcl.example` and setting the state bucket name created by stage 00. The state bucket is encrypted, versioned, private, and protected against Terraform destruction.
 
 Wait for both member accounts to finish provisioning and verify that `OrganizationAccountAccessRole` can be assumed. Then configure the account IDs in the next stage:
 
