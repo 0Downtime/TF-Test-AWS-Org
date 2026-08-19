@@ -27,6 +27,12 @@ Describe 'Configure-AwsEntraFederation.ps1 static safety checks' {
         $scriptText | Should -Match 'END AWS ENTRA FEDERATION'
         $scriptText | Should -Match '\.bak'
     }
+
+    It 'supports full group names and prefix plus suffix mappings' {
+        $scriptText | Should -Match "Get-ConfigValue -Object .+ -Name 'entraGroup'"
+        $scriptText | Should -Match "Get-ConfigValue -Object .+ -Name 'entraGroupSuffix'"
+        $scriptText | Should -Match '\$groupNamePrefix-\$groupSuffix'
+    }
 }
 
 Describe 'Federation configuration examples' {

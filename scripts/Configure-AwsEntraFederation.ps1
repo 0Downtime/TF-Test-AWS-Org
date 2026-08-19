@@ -83,14 +83,22 @@ function Read-FederationConfig {
         Require-Value -Name "entra.$name" -Value (Get-ConfigValue -Object $entra -Name $name)
     }
 
+    $groupNamePrefix = [string](Get-ConfigValue -Object $entra -Name 'groupNamePrefix')
+
     $seenMappingNames = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
     $normalizedMappings = [Collections.Generic.List[object]]::new()
 
     foreach ($mapping in $mappings) {
         $mappingName = [string](Get-ConfigValue -Object $mapping -Name 'name')
         $groupName = [string](Get-ConfigValue -Object $mapping -Name 'entraGroup')
+        $groupSuffix = [string](Get-ConfigValue -Object $mapping -Name 'entraGroupSuffix')
         $permissionSet = [string](Get-ConfigValue -Object $mapping -Name 'permissionSet')
         $accountIds = @(Get-ConfigValue -Object $mapping -Name 'accountIds' -Default @())
+
+        if ([string]::IsNullOrWhiteSpace($groupName) -and -not [string]::IsNullOrWhiteSpace($groupSuffix)) {
+            Require-Value -Name 'entra.groupNamePrefix' -Value $groupNamePrefix
+            $groupName = "$groupNamePrefix-$groupSuffix"
+        }
 
         Require-Value -Name 'accessMappings[].name' -Value $mappingName
         Require-Value -Name "accessMappings[$mappingName].entraGroup" -Value $groupName
