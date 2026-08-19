@@ -4,3 +4,8 @@
 *.tfplan
 backend.hcl
 crash.log
+scripts/*.local.json
+stages/02-governance/federation.auto.tfvars.json
+scripts/aws-terraform-adoption-plan*.json
+stages/01-organization/*.tfplan
+stages/02-governance/federation.auto.tfvars.json.bak

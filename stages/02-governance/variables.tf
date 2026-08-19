@@ -79,3 +79,20 @@ variable "billing_target_account_ids" {
   type        = set(string)
   default     = []
 }
+
+variable "sso_group_assignments" {
+  description = "Generated or manually supplied IAM Identity Center group assignments. Permission sets are the permission sets managed by this stage."
+  type = map(object({
+    group_id           = string
+    permission_set     = string
+    target_account_ids = set(string)
+  }))
+  default = {}
+
+  validation {
+    condition = alltrue([
+      for assignment in values(var.sso_group_assignments) : contains(["SecurityAudit", "BillingReadOnly"], assignment.permission_set)
+    ])
+    error_message = "sso_group_assignments.permission_set must be SecurityAudit or BillingReadOnly."
+  }
+}

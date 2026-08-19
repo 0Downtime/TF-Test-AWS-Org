@@ -4,6 +4,27 @@ data "aws_ssoadmin_instances" "this" {
 
 locals {
   identity_center_instance_arn = try(tolist(data.aws_ssoadmin_instances.this.arns)[0], null)
+  billing_permission_set_enabled = var.billing_group_id != null || anytrue([
+    for assignment in values(var.sso_group_assignments) : assignment.permission_set == "BillingReadOnly"
+  ])
+  configured_sso_assignments = flatten([
+    for assignment_name, assignment in var.sso_group_assignments : [
+      for account_id in assignment.target_account_ids : {
+        assignment_name = assignment_name
+        group_id        = assignment.group_id
+        permission_set  = assignment.permission_set
+        account_id      = account_id
+      }
+    ]
+  ])
+  configured_sso_assignment_map = {
+    for assignment in local.configured_sso_assignments :
+    "${assignment.assignment_name}:${assignment.account_id}" => assignment
+  }
+  permission_set_arns = {
+    SecurityAudit   = aws_ssoadmin_permission_set.security.arn
+    BillingReadOnly = try(aws_ssoadmin_permission_set.billing[0].arn, null)
+  }
 }
 
 check "identity_center_enabled" {
@@ -185,7 +206,7 @@ resource "aws_ssoadmin_account_assignment" "security" {
 }
 
 resource "aws_ssoadmin_permission_set" "billing" {
-  count = var.billing_group_id == null ? 0 : 1
+  count = local.billing_permission_set_enabled ? 1 : 0
 
   provider         = aws.identity_center
   instance_arn     = local.identity_center_instance_arn
@@ -195,7 +216,7 @@ resource "aws_ssoadmin_permission_set" "billing" {
 }
 
 resource "aws_ssoadmin_permission_set_inline_policy" "billing" {
-  count = var.billing_group_id == null ? 0 : 1
+  count = local.billing_permission_set_enabled ? 1 : 0
 
   provider           = aws.identity_center
   instance_arn       = local.identity_center_instance_arn
@@ -232,5 +253,17 @@ resource "aws_ssoadmin_account_assignment" "billing" {
   principal_id       = var.billing_group_id
   principal_type     = "GROUP"
   target_id          = each.value
+  target_type        = "AWS_ACCOUNT"
+}
+
+resource "aws_ssoadmin_account_assignment" "configured" {
+  for_each = length(var.sso_group_assignments) == 0 ? {} : local.configured_sso_assignment_map
+
+  provider           = aws.identity_center
+  instance_arn       = local.identity_center_instance_arn
+  permission_set_arn = local.permission_set_arns[each.value.permission_set]
+  principal_id       = each.value.group_id
+  principal_type     = "GROUP"
+  target_id          = each.value.account_id
   target_type        = "AWS_ACCOUNT"
 }
