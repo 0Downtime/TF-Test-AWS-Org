@@ -54,6 +54,18 @@ variable "sso_security_managed_policy_arns" {
   default     = ["arn:aws:iam::aws:policy/SecurityAudit"]
 }
 
+variable "secrets_manager_permission_set_name" {
+  description = "Permission set granting full Secrets Manager access and read-only access to other AWS services."
+  type        = string
+  default     = "SecretsManagerAdminReadOnly"
+}
+
+variable "secrets_manager_read_managed_policy_arns" {
+  description = "AWS managed policies providing read-only access outside Secrets Manager."
+  type        = set(string)
+  default     = ["arn:aws:iam::aws:policy/ReadOnlyAccess"]
+}
+
 variable "sso_group_id" {
   description = "Optional IAM Identity Center group ID to receive the security permission set."
   type        = string
@@ -91,8 +103,8 @@ variable "sso_group_assignments" {
 
   validation {
     condition = alltrue([
-      for assignment in values(var.sso_group_assignments) : contains(["SecurityAudit", "BillingReadOnly"], assignment.permission_set)
+      for assignment in values(var.sso_group_assignments) : contains(["SecurityAudit", "BillingReadOnly", var.secrets_manager_permission_set_name], assignment.permission_set)
     ])
-    error_message = "sso_group_assignments.permission_set must be SecurityAudit or BillingReadOnly."
+    error_message = "sso_group_assignments.permission_set must be SecurityAudit, BillingReadOnly, or the configured secrets-manager permission set."
   }
 }

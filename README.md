@@ -8,6 +8,7 @@ This repository is a staged deployment for the architecture in the reference dia
 - production account under Workloads
 - organization-wide CloudTrail delivered to the log-archive account
 - IAM Identity Center permission sets with optional group assignments
+- a Terraform-managed Entra security group for full Secrets Manager plus read-only AWS access
 - a Windows PowerShell Entra ID federation orchestrator for IAM Identity Center
 - an empty, protected Secrets Manager secret in the production account
 
@@ -69,6 +70,28 @@ cp terraform.tfvars.example terraform.tfvars
 terraform init -backend-config=backend.hcl
 terraform plan
 terraform apply
+```
+
+After the AWS foundation is complete, create the Entra access group with the separate Terraform stage. It uses the current Azure CLI login locally, keeps Entra state separate from AWS state, and defaults to `SRA-PROD-SecretsManagerAdminReadOnly`:
+
+```powershell
+az login --tenant <entra-tenant-id>
+Copy-Item .\stages\04-entra-access\terraform.tfvars.example .\stages\04-entra-access\terraform.tfvars
+# Set tenant_id and, if needed, group_name_prefix/group_name_suffix.
+Copy-Item .\stages\04-entra-access\backend.hcl.example .\stages\04-entra-access\backend.hcl
+# Set the existing state bucket name in backend.hcl.
+Push-Location .\stages\04-entra-access
+terraform init -reconfigure -backend-config backend.hcl
+terraform validate
+terraform plan -out=entra-access.tfplan
+terraform apply entra-access.tfplan
+Pop-Location
+```
+
+The stage creates only a non-mail-enabled Entra security group; membership remains managed separately. After SCIM provisions the group into IAM Identity Center, add a matching `SecretsManagerAdminReadOnly` mapping to the ignored local federation configuration and rerun federation Apply so the existing governance stage receives the SCIM group ID. The AWS permission set combines AWS `ReadOnlyAccess` with an inline `secretsmanager:*` allow. Review this carefully because it permits creating, reading, updating, and deleting secrets across every assigned account. If the group already exists, import it before planning:
+
+```powershell
+terraform -chdir=stages/04-entra-access import azuread_group.secrets_manager_admin_read_only /groups/<entra-group-object-id>
 ```
 
 Finally deploy the production-account baseline:
