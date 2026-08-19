@@ -1,6 +1,6 @@
 # Entra ID federation for AWS IAM Identity Center
 
-This runbook records the sequence that advanced the Windows test environment and is intended for repeating the setup in a production tenant or AWS Organization.
+This runbook is the repeatable procedure for configuring Entra ID federation, SCIM provisioning, managed AWS CLI profiles, and optional Terraform governance assignments for an AWS Organization.
 
 It covers Entra SAML federation, Entra-to-AWS SCIM provisioning, certificate-backed Microsoft Graph automation from Windows PowerShell 7, Terraform-managed permission sets and assignments, and managed AWS CLI SSO profiles.
 
@@ -31,7 +31,7 @@ pwsh --version
 
 The Windows host needs AWS CLI v2, Terraform, PowerShell 7, Microsoft.Graph PowerShell modules, Pester, an AWS profile with management-account Organizations and IAM Identity Center permissions, and a certificate-backed Entra automation app with its private key in the Windows certificate store.
 
-For the local test VM, the AWS profile was management-girsnoopy. Production should use the intended management-account profile instead.
+Use the AWS management-account profile intended for the target environment in every command below. Replace `management` with that profile name when necessary.
 
 ## 1a. Clear the Organizations account-quota gate
 
@@ -65,16 +65,16 @@ Before creating the log-archive and production member accounts, run the reposito
 Run this in PowerShell 7 inside the Windows VM, not in the Mac zsh shell. PowerShell uses the backtick for line continuation; zsh does not. A one-line command avoids shell-specific continuation errors.
 
 ~~~powershell
-pwsh -NoProfile -File .\scripts\Ensure-AwsOrganizationsAccountQuota.ps1 -ManagementProfile management-girsnoopy -Region us-east-1 -RequiredAccountCount 3 -Mode Plan
+pwsh -NoProfile -File .\scripts\Ensure-AwsOrganizationsAccountQuota.ps1 -ManagementProfile management -Region us-east-1 -RequiredAccountCount 3 -Mode Plan
 ~~~
 
 If the result is QuotaIncreaseRequired and no request is open, submit one explicitly:
 
 ~~~powershell
-pwsh -NoProfile -File .\scripts\Ensure-AwsOrganizationsAccountQuota.ps1 -ManagementProfile management-girsnoopy -Region us-east-1 -RequiredAccountCount 3 -RequestedQuota 20 -Mode Request -Approve
+pwsh -NoProfile -File .\scripts\Ensure-AwsOrganizationsAccountQuota.ps1 -ManagementProfile management -Region us-east-1 -RequiredAccountCount 3 -RequestedQuota 20 -Mode Request -Approve
 ~~~
 
-Do not submit a duplicate request if the result is Pending or CASE_OPENED. Rerun the Plan command until the result is Ready or QuotaApprovedRefreshRequired, then run the organization bootstrap wrapper with the same management profile. The test environment currently has one active account, a quota of one, and an existing CASE_OPENED request for 20 accounts; member-account creation must wait for AWS approval.
+Do not submit a duplicate request if the result is Pending or CASE_OPENED. Rerun the Plan command until the result is Ready or QuotaApprovedRefreshRequired, then run the organization bootstrap wrapper with the same management profile. Member-account creation must wait for AWS approval when the quota is not ready.
 
 ## 2. Prepare the repository and local configuration
 
@@ -162,7 +162,7 @@ In the Entra enterprise application:
 4. Test the connection, save, and start provisioning.
 5. Confirm the job reaches Active and has a successful execution.
 
-The test environment reached a successful job with groups exported to AWS. Allow a provisioning cycle to complete before declaring that a group is missing.
+Allow at least one provisioning cycle to complete and confirm a successful execution before declaring that a group is missing.
 
 ## 7. Store the SCIM token on Windows and run Apply
 
@@ -200,13 +200,12 @@ A successful result should confirm the AWS profile targets the expected manageme
 
 The orchestrator additionally writes `phases.manualBootstrap.status`. It must be `verified` for Validate or Apply. The associated checks cover the Identity Center instance, SAML mode, active signing certificate, fresh metadata, Entra application assignments, an Active provisioning job, and AWS groups present in the identity store. If a check fails, the script names the failed checks and stops. The AWS API does not expose a direct external-identity-source flag, so successful SCIM-provisioned groups are the downstream proof that the manual cutover is functioning.
 
-Run the repository tests on Windows:
+Run the repository tests on Windows and require zero failures before handoff:
 
 ~~~powershell
 Invoke-Pester -Path .\tests\Configure-AwsEntraFederation.Tests.ps1 -Output Detailed
 ~~~
 
-The current test checkpoint reached in the VM is 11 passing tests and zero failures.
 
 ## 9. Terraform governance and AWS CLI profiles
 
@@ -241,7 +240,7 @@ pwsh -NoProfile -File .\scripts\Invoke-AwsEntraFederationBootstrap.ps1 -Mode App
 
 Review the generated ignored file at stages\02-governance\federation.auto.tfvars.json.
 
-Do not use -ApplyTerraform while the organization lacks the accounts and inputs required by stage 02-governance. In the test environment there was one active management account and zero permission sets, so the full governance apply was intentionally deferred.
+Do not use `-ApplyGovernance` while the organization lacks the accounts and inputs required by stage 02-governance. Review the generated governance plan before enabling the optional governance handoff.
 
 The script writes only its managed AWS CLI SSO block and preserves unrelated profiles. After Terraform creates the permission sets and assignments:
 
@@ -263,7 +262,7 @@ Use a dedicated test user, not a production administrator:
 7. Run aws sts get-caller-identity --profile <managed-profile>.
 8. Confirm the account ID and role match the mapping.
 
-The test environment had groups provisioned successfully but no AWS identity-store users yet; adding a test user to an assigned Entra group is a required final checkpoint.
+Adding a dedicated test user to an assigned Entra group and completing an end-to-end SSO login is a required final checkpoint.
 
 ## 11. Recovery and troubleshooting
 
