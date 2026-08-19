@@ -212,6 +212,27 @@ The current test checkpoint reached in the VM is 11 passing tests and zero failu
 
 Terraform remains the owner of permission-set definitions and AWS account assignments. The federation script only generates the group IDs and mapping consumed by the governance stage.
 
+### Optional Secrets Manager administrator/read-only group
+
+The repository includes `stages/04-entra-access`, which creates the configurable Entra security group used for a permission set combining AWS `ReadOnlyAccess` with an inline `secretsmanager:*` policy. Run it after the AWS foundation stages and after `az login --tenant <tenant-id>`:
+
+~~~powershell
+Copy-Item .\stages\04-entra-access\terraform.tfvars.example .\stages\04-entra-access\terraform.tfvars
+Copy-Item .\stages\04-entra-access\backend.hcl.example .\stages\04-entra-access\backend.hcl
+# Set tenant_id, the group prefix/suffix, and the state bucket in those ignored files.
+Push-Location .\stages\04-entra-access
+terraform init -reconfigure -backend-config backend.hcl
+terraform plan -out=entra-access.tfplan
+terraform apply entra-access.tfplan
+Pop-Location
+~~~
+
+Wait for SCIM to provision the group. Then add a `SecretsManagerAdminReadOnly` entry to `scripts\entra-aws-federation.local.json` and rerun federation Apply. The existing orchestrator resolves the newly provisioned IAM Identity Center group ID and writes the assignment mapping consumed by stage 02. If the group already exists, import it before planning:
+
+~~~powershell
+terraform -chdir=stages/04-entra-access import azuread_group.secrets_manager_admin_read_only /groups/<entra-group-object-id>
+~~~
+
 When the required log-archive/member-account foundation exists, run the orchestrator with the explicit governance approval:
 
 ~~~powershell

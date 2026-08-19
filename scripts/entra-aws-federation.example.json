@@ -32,6 +32,12 @@
       "entraGroup": "AWS-BillingReadOnly",
       "permissionSet": "BillingReadOnly",
       "accountIds": ["000000000000"]
+    },
+    {
+      "name": "secrets-manager-admin-read-only",
+      "entraGroup": "REPLACE_WITH_ENVIRONMENT_GROUP_PREFIX-SecretsManagerAdminReadOnly",
+      "permissionSet": "SecretsManagerAdminReadOnly",
+      "accountIds": ["all-active-accounts"]
     }
   ]
 }

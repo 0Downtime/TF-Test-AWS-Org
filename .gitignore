@@ -3,6 +3,7 @@
 *.tfstate.*
 *.tfplan
 backend.hcl
+terraform.tfvars
 crash.log
 scripts/*.local.json
 stages/02-governance/federation.auto.tfvars.json

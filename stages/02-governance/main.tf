@@ -22,8 +22,9 @@ locals {
     "${assignment.assignment_name}:${assignment.account_id}" => assignment
   }
   permission_set_arns = {
-    SecurityAudit   = aws_ssoadmin_permission_set.security.arn
-    BillingReadOnly = try(aws_ssoadmin_permission_set.billing[0].arn, null)
+    SecurityAudit               = aws_ssoadmin_permission_set.security.arn
+    BillingReadOnly             = try(aws_ssoadmin_permission_set.billing[0].arn, null)
+    SecretsManagerAdminReadOnly = aws_ssoadmin_permission_set.secrets_manager.arn
   }
 }
 
@@ -94,6 +95,31 @@ data "aws_iam_policy_document" "log_archive" {
 
     actions   = ["s3:GetBucketAcl"]
     resources = [aws_s3_bucket.log_archive.arn]
+
+    condition {
+      test     = "StringEquals"
+      variable = "aws:SourceArn"
+      values   = ["arn:aws:cloudtrail:${var.management_region}:${var.management_account_id}:trail/${var.cloudtrail_name}"]
+    }
+  }
+
+  statement {
+    sid    = "AWSCloudTrailWriteAccount"
+    effect = "Allow"
+
+    principals {
+      type        = "Service"
+      identifiers = ["cloudtrail.amazonaws.com"]
+    }
+
+    actions   = ["s3:PutObject"]
+    resources = ["${aws_s3_bucket.log_archive.arn}/AWSLogs/${var.management_account_id}/*"]
+
+    condition {
+      test     = "StringEquals"
+      variable = "s3:x-amz-acl"
+      values   = ["bucket-owner-full-control"]
+    }
 
     condition {
       test     = "StringEquals"
@@ -213,6 +239,45 @@ resource "aws_ssoadmin_permission_set" "billing" {
   name             = "BillingReadOnly"
   description      = "Read-only billing and cost visibility in the management account."
   session_duration = "PT4H"
+}
+
+resource "aws_ssoadmin_permission_set" "secrets_manager" {
+  provider         = aws.identity_center
+  instance_arn     = local.identity_center_instance_arn
+  name             = var.secrets_manager_permission_set_name
+  description      = "Full Secrets Manager access with read-only access to other AWS services."
+  session_duration = "PT4H"
+
+  lifecycle {
+    precondition {
+      condition     = local.identity_center_instance_arn != null
+      error_message = "IAM Identity Center must be enabled before creating permission sets."
+    }
+  }
+}
+
+resource "aws_ssoadmin_managed_policy_attachment" "secrets_manager_read" {
+  for_each           = var.secrets_manager_read_managed_policy_arns
+  provider           = aws.identity_center
+  instance_arn       = local.identity_center_instance_arn
+  permission_set_arn = aws_ssoadmin_permission_set.secrets_manager.arn
+  managed_policy_arn = each.value
+}
+
+resource "aws_ssoadmin_permission_set_inline_policy" "secrets_manager" {
+  provider           = aws.identity_center
+  instance_arn       = local.identity_center_instance_arn
+  permission_set_arn = aws_ssoadmin_permission_set.secrets_manager.arn
+
+  inline_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Sid      = "FullSecretsManagerAccess"
+      Effect   = "Allow"
+      Action   = ["secretsmanager:*"]
+      Resource = "*"
+    }]
+  })
 }
 
 resource "aws_ssoadmin_permission_set_inline_policy" "billing" {

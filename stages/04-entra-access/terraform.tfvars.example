@@ -1,0 +1,4 @@
+tenant_id          = "00000000-0000-0000-0000-000000000000"
+use_azure_cli      = true
+group_name_prefix  = "REPLACE_WITH_ENVIRONMENT_GROUP_PREFIX"
+group_name_suffix  = "SecretsManagerAdminReadOnly"
