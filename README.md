@@ -1,85 +1,136 @@
 # AWS Organization baseline
 
-This repository is a staged deployment for the architecture in the reference diagram:
+Terraform and PowerShell automation for a staged AWS Organization foundation, AWS IAM Identity Center governance, an optional production Secrets Manager baseline, and Entra ID federation.
 
-- management account with AWS Organizations and trusted service access
-- Security, Infrastructure, and Workloads organizational units
-- log-archive account under Security
-- production account under Workloads
-- organization-wide CloudTrail delivered to the log-archive account
-- IAM Identity Center permission sets with optional group assignments
-- a Terraform-managed Entra security group for full Secrets Manager plus read-only AWS access
-- a Windows PowerShell Entra ID federation orchestrator for IAM Identity Center
-- an empty, protected Secrets Manager secret in the production account
+The supported workflow uses the directories under `stages/`. Each stage has its own Terraform state so account creation, cross-account resources, Azure resources, and federation changes remain independently reviewable.
 
-The stages are intentional. Account creation and cross-account role assumption are separate operations in AWS, so child-account resources are not placed in the same Terraform state as account creation.
+## What this repository manages
 
-## Before deployment
+| Stage | Purpose | Credentials used |
+| --- | --- | --- |
+| `00-state-bucket` | Creates the encrypted, versioned, private S3 bucket used by later Terraform backends. | AWS management account |
+| `01-organization` | Creates or adopts the AWS Organization, OUs, and configurable member accounts. | AWS management account |
+| `02-governance` | Creates the log-archive bucket, organization CloudTrail, IAM Identity Center permission sets, and optional group assignments. | Management account plus `OrganizationAccountAccessRole` in the log-archive account |
+| `03-production` | Creates an empty, protected Secrets Manager secret and an optional least-privilege access role in the production account. | Management account plus `OrganizationAccountAccessRole` in the production account |
+| `04-entra-access` | Creates the optional non-mail-enabled Entra security group used by the Secrets Manager access mapping. | Current Azure CLI login |
 
-1. Decide whether the management account already owns an AWS Organization. For an existing organization, import and review the organization resource rather than creating a second organization.
-2. Prepare two unique, valid root-email addresses for the member accounts.
-3. Enable an organization instance of IAM Identity Center in the region you will use for SSO. Create an administrative group and record its identity-store group ID if you want Terraform to assign access.
+The federation scripts configure Entra SAML, SCIM provisioning, managed AWS CLI SSO profiles, and generated Terraform assignment inputs. The first IAM Identity Center identity-source cutover and SCIM setup still require an AWS/Entra console workflow; see the [production federation runbook](docs/entra-aws-federation-production-runbook.md).
 
-## Deployment
+The root-level Terraform files are the original monolithic configuration and are not part of the supported staged workflow. Run Terraform from a stage directory, not from the repository root. The staged configuration is the maintained path for new deployments and existing-environment adoption.
 
-Run each stage from its own directory and state. Stage 00 uses local state because it creates the remote backend used by the later stages. Use the same management-account profile for all stages; the cross-account providers use that profile as their source credentials.
+## Prerequisites
 
-First create the Terraform state bucket:
+- Terraform `>= 1.5.0, < 2.0.0`.
+- AWS CLI v2 and credentials for the management account. Use a named profile where possible.
+- An AWS Organization or permission to create one. The management account must be able to use Organizations, IAM Identity Center, CloudTrail, S3, and cross-account role assumption as applicable.
+- An organization instance of IAM Identity Center enabled in the region configured for stage 02.
+- Two unique member-account root email addresses when stage 01 will create accounts.
+- PowerShell 7, Microsoft Graph PowerShell, and Pester for the Windows federation workflow.
+- Azure CLI logged in to the target tenant if stage 04 is used with its default `use_azure_cli = true`.
 
-```powershell
-cd stages/00-state-bucket
-Copy-Item terraform.tfvars.example terraform.tfvars
-notepad terraform.tfvars
-terraform init
-terraform plan -out=tfplan
-terraform apply tfplan
-terraform output
+Do not commit `terraform.tfvars`, `backend.hcl`, local federation/adoption JSON, generated plan files, metadata XML, SCIM tokens, private keys, or DPAPI-protected files. Terraform state can contain sensitive infrastructure metadata; protect the state bucket and its access accordingly.
+
+## Deployment order
+
+```text
+00 state bucket
+      |
+01 organization and accounts
+      |
+wait for member accounts and OrganizationAccountAccessRole
+      |
+02 governance and IAM Identity Center
+      |
+03 production baseline
+      |
+04 optional Entra group -> manual SAML/SCIM -> federation automation
 ```
 
-Choose any globally unique lowercase S3 bucket name in `terraform.tfvars`.
+The Entra and federation path is optional. If group assignments are enabled, complete stage 02 permission-set setup first, then provision the Entra group and rerun the governance plan after the federation script generates the SCIM group ID mapping.
+
+## Quick start
+
+The commands below assume Bash from the repository root. In PowerShell, use `Copy-Item` in place of `cp` and run each Terraform command from the indicated stage directory if `-chdir` path handling differs in your installed Terraform version.
+
+### 1. Create the state bucket
 
 ```bash
-cd stages/01-organization
-cp terraform.tfvars.example terraform.tfvars
-# Edit terraform.tfvars with real unique account emails.
-terraform init -backend-config=backend.hcl
-terraform plan
-terraform apply
-terraform output
+cp stages/00-state-bucket/terraform.tfvars.example stages/00-state-bucket/terraform.tfvars
+# Edit the management account ID, profile, region, and globally unique bucket name.
+terraform -chdir=stages/00-state-bucket init
+terraform -chdir=stages/00-state-bucket plan -out=tfplan
+terraform -chdir=stages/00-state-bucket apply tfplan
+terraform -chdir=stages/00-state-bucket output
 ```
 
-If the organization was created outside Terraform, import it before planning. To stage the organization and OUs without creating member accounts yet, set `create_member_accounts = false` and leave the account-email variables empty. After the OUs are managed, set it back to `true`, provide the two unique root-email addresses, and run a new plan before creating the accounts:
+Stage 00 intentionally uses local state because it creates the remote backend used by later stages. Its bucket has versioning, server-side encryption, public-access blocking, and `prevent_destroy` protection.
+
+### 2. Create or adopt the organization
+
+For a new organization:
+
+```bash
+cp stages/01-organization/terraform.tfvars.example stages/01-organization/terraform.tfvars
+cp stages/01-organization/backend.hcl.example stages/01-organization/backend.hcl
+# Set the state bucket, management account, and unique member-account emails.
+terraform -chdir=stages/01-organization init -backend-config=backend.hcl
+terraform -chdir=stages/01-organization plan -out=tfplan
+terraform -chdir=stages/01-organization apply tfplan
+terraform -chdir=stages/01-organization output
+```
+
+For an existing organization, set `create_member_accounts = false`, leave the legacy account-email variables empty when `member_accounts` is not being used, and import the organization before planning:
 
 ```powershell
-terraform import `
-  -var management_account_id=000000000000 `
-  -var management_profile=management `
-  -var management_region=us-east-1 `
-  -var create_member_accounts=false `
+terraform -chdir=stages/01-organization import `
+  -var="management_account_id=000000000000" `
+  -var="management_profile=management" `
+  -var="management_region=us-east-1" `
+  -var="create_member_accounts=false" `
   aws_organizations_organization.this o-example1234
 ```
 
-Create `backend.hcl` in each stage by copying its `backend.hcl.example` and setting the state bucket name created by stage 00. The state bucket is encrypted, versioned, private, and protected against Terraform destruction.
+Configure `organizational_units` and `member_accounts` to match the enterprise naming and account map. Existing resources must be imported before Terraform can converge them. The adoption helper is documented below.
 
-Wait for both member accounts to finish provisioning and verify that `OrganizationAccountAccessRole` can be assumed. Then configure the account IDs in the next stage:
+Wait for newly created accounts to become `ACTIVE` and verify that `OrganizationAccountAccessRole` can be assumed before continuing.
+
+### 3. Apply governance
 
 ```bash
-cd ../02-governance
-cp terraform.tfvars.example terraform.tfvars
-# Set organization_id, management_account_id, and log_archive_account_id.
-terraform init -backend-config=backend.hcl
-terraform plan
-terraform apply
+cp stages/02-governance/terraform.tfvars.example stages/02-governance/terraform.tfvars
+cp stages/02-governance/backend.hcl.example stages/02-governance/backend.hcl
+# Set organization_id, management_account_id, log_archive_account_id, and bucket name.
+terraform -chdir=stages/02-governance init -backend-config=backend.hcl
+terraform -chdir=stages/02-governance plan -out=tfplan
+terraform -chdir=stages/02-governance apply tfplan
+terraform -chdir=stages/02-governance output
 ```
 
-After the AWS foundation is complete, create the Entra access group with the separate Terraform stage. It uses the current Azure CLI login locally, keeps Entra state separate from AWS state, and defaults to `REPLACE_WITH_ENVIRONMENT_GROUP_PREFIX-SecretsManagerAdminReadOnly`:
+Before applying, enable IAM Identity Center in the intended `identity_center_region`. Review the CloudTrail destination policy, account IDs, permission-set policies, and any configured group assignments. The `SecretsManagerAdminReadOnly` permission set combines AWS `ReadOnlyAccess` with an inline `secretsmanager:*` allow and must be treated as high privilege.
+
+### 4. Apply the production baseline
+
+```bash
+cp stages/03-production/terraform.tfvars.example stages/03-production/terraform.tfvars
+cp stages/03-production/backend.hcl.example stages/03-production/backend.hcl
+# Set production_account_id, profile, region, and secret name.
+terraform -chdir=stages/03-production init -backend-config=backend.hcl
+terraform -chdir=stages/03-production plan -out=tfplan
+terraform -chdir=stages/03-production apply tfplan
+terraform -chdir=stages/03-production output
+```
+
+Stage 03 creates a secret container but never stores a secret value. The optional `production_trusted_principal_arns` input creates a role with access only to that baseline secret; leave it empty until a real workload or administration principal exists.
+
+### 5. Optional Entra access and federation
+
+Create the Entra group after `az login` to the target tenant:
 
 ```powershell
 az login --tenant <entra-tenant-id>
 Copy-Item .\stages\04-entra-access\terraform.tfvars.example .\stages\04-entra-access\terraform.tfvars
-# Set tenant_id and, if needed, group_name_prefix/group_name_suffix.
 Copy-Item .\stages\04-entra-access\backend.hcl.example .\stages\04-entra-access\backend.hcl
-# Set the existing state bucket name in backend.hcl.
+# Set tenant_id and the state bucket in the ignored files.
 Push-Location .\stages\04-entra-access
 terraform init -reconfigure -backend-config backend.hcl
 terraform validate
@@ -88,62 +139,26 @@ terraform apply entra-access.tfplan
 Pop-Location
 ```
 
-The stage creates only a non-mail-enabled Entra security group; membership remains managed separately. After SCIM provisions the group into IAM Identity Center, add a matching `SecretsManagerAdminReadOnly` mapping to the ignored local federation configuration and rerun federation Apply so the existing governance stage receives the SCIM group ID. The AWS permission set combines AWS `ReadOnlyAccess` with an inline `secretsmanager:*` allow. Review this carefully because it permits creating, reading, updating, and deleting secrets across every assigned account. If the group already exists, import it before planning:
+The group is security-enabled, non-mail-enabled, and protected against Terraform destruction. Membership and SCIM provisioning remain separate operations. If the group already exists, import it before planning:
 
 ```powershell
 terraform -chdir=stages/04-entra-access import azuread_group.secrets_manager_admin_read_only /groups/<entra-group-object-id>
 ```
 
-Finally deploy the production-account baseline:
-
-```bash
-cd ../03-production
-cp terraform.tfvars.example terraform.tfvars
-# Set production_account_id.
-terraform init -backend-config=backend.hcl
-terraform plan
-terraform apply
-```
-
-Do not commit `terraform.tfvars` or backend credentials. Review every plan, especially changes to the organization, account parents, CloudTrail bucket policy, IAM Identity Center assignments, and the protected log bucket.
-
-## Adopting an existing enterprise foundation
-
-The organization stage is configuration-driven. Set `organizational_units` and `member_accounts` to your enterprise naming and account map; the original Security/Infrastructure/Workloads and log-archive/production defaults remain available. Existing AWS resources must be imported into the matching Terraform state before Terraform can converge them.
-
-Before creating member accounts, run the account-quota preflight. Put any existing Service Quotas request ID in `organization.accountQuotaRequestId`; the preflight will report `Pending` and prevent an account-creation apply until AWS updates the quota:
+For the complete SAML, SCIM, certificate, quota, managed-profile, and governance workflow, follow the [Entra ID federation production runbook](docs/entra-aws-federation-production-runbook.md). The canonical entry point is:
 
 ```powershell
-pwsh .\scripts\Ensure-AwsOrganizationsAccountQuota.ps1 `
-  -ManagementProfile management `
-  -Region us-east-1 `
-  -RequiredAccountCount 3 `
-  -RequestId <service-quotas-request-id> `
-  -Mode Plan `
-  -RequireReady
+pwsh .\scripts\Invoke-AwsEntraFederationBootstrap.ps1 `
+  -Mode Validate `
+  -OrganizationMode Skip `
+  -ConfigPath .\scripts\entra-aws-federation.local.json
 ```
 
-To submit a new request, use `-Mode Request -Approve`. This is intentionally separate from Terraform apply so quota increases are explicit and are not duplicated.
+Start from the example configuration, keep the local copy ignored, and supply SCIM credentials only through the secure prompt or a local secure parameter. `Apply` requires explicit approval for the identity-source boundary; organization creation, quota requests, and governance apply have separate approvals.
 
-For the normal organization bootstrap, use the gated wrapper so Terraform cannot start account creation while the quota request is pending:
+## Existing-environment adoption and account quota
 
-```powershell
-pwsh .\scripts\Invoke-AwsOrganizationBootstrap.ps1 `
-  -ManagementProfile management `
-  -Region us-east-1 `
-  -RequiredAccountCount 3 `
-  -RequestId <service-quotas-request-id> `
-  -Mode Plan
-
-pwsh .\scripts\Invoke-AwsOrganizationBootstrap.ps1 `
-  -ManagementProfile management `
-  -Region us-east-1 `
-  -RequiredAccountCount 3 `
-  -RequestId <service-quotas-request-id> `
-  -Mode Apply
-```
-
-Generate a read-only adoption plan from the Windows host:
+The organization stage is configuration-driven. To generate a read-only adoption plan from Windows, copy the example outside source control or to an ignored local path:
 
 ```powershell
 pwsh .\scripts\Adopt-AwsTerraformResources.ps1 `
@@ -151,109 +166,75 @@ pwsh .\scripts\Adopt-AwsTerraformResources.ps1 `
   -Mode Plan
 ```
 
-The plan discovers the existing organization, direct-child OUs, accounts, log archive bucket, CloudTrail trail, and explicitly supplied permission-set ARNs. It writes only redacted resource identifiers and proposed import addresses. After reviewing it, run with `-Mode Apply -Approve` to import existing resources into Terraform state; this does not modify AWS resources. Run `terraform plan` afterward and review the convergence changes before applying them. Resources that are absent are reported as `missing-create` and remain subject to normal Terraform plan review.
+Review the proposed resource addresses and redacted identifiers. Run `-Mode Apply -Approve` only after review; it imports existing resources into Terraform state but does not modify AWS resources. Run Terraform plan afterward and review any convergence changes before applying them.
 
-## Entra ID federation on Windows
-
-For the complete repeatable production procedure, see [docs/entra-aws-federation-production-runbook.md](docs/entra-aws-federation-production-runbook.md). The canonical entry point is `scripts/Invoke-AwsEntraFederationBootstrap.ps1`; it runs the quota gate, optional organization bootstrap, federation automation, managed AWS CLI profile generation, and optional governance handoff in the correct order.
-
-The repository includes `scripts/Configure-AwsEntraFederation.ps1` and an example configuration at `scripts/entra-aws-federation.example.json`. The script uses the existing AWS management profile for AWS discovery and a certificate-backed Microsoft Graph application for Entra automation.
-
-Install the prerequisites on the Windows host:
+Before creating member accounts, run the quota preflight:
 
 ```powershell
-Install-Module Microsoft.Graph -Scope CurrentUser
-Install-Module Pester -Scope CurrentUser
+pwsh .\scripts\Ensure-AwsOrganizationsAccountQuota.ps1 `
+  -ManagementProfile management `
+  -Region us-east-1 `
+  -RequiredAccountCount 3 `
+  -Mode Plan `
+  -RequireReady
 ```
 
-Copy the example configuration outside the repository or to a local ignored file, then set the tenant, Graph application, certificate thumbprint, AWS access portal URL, metadata paths, and group mappings. The certificate private key must already be present in the Windows certificate store and must not be committed.
+If no request is open and AWS requires an increase, submit one separately with `-Mode Request -Approve`. Do not submit another request while the result is `Pending`, `CASE_OPENED`, or otherwise indicates that an existing request is active.
 
-The first AWS setup still requires the IAM Identity Center organization instance, the external-identity-provider wizard, and the one-time SCIM endpoint/token retrieval. Supply the SCIM token through the bootstrap script's secure prompt or `-ScimToken`; the script stores it only as a Windows DPAPI-protected value under `%ProgramData%\AwsEntraFederation`. The Entra metadata XML and AWS service-provider metadata XML are validated locally but are not placed in Terraform state.
-
-Use the orchestrator for production onboarding. Set the non-secret `bootstrap` values in the JSON example, then run a read-only federation and quota preflight against the existing organization:
+For normal organization bootstrapping, the gated wrapper combines the quota preflight with Terraform plan/apply:
 
 ```powershell
-pwsh .\scripts\Invoke-AwsEntraFederationBootstrap.ps1 `
-  -Mode Validate `
-  -ConfigPath .\scripts\entra-aws-federation.local.json
+pwsh .\scripts\Invoke-AwsOrganizationBootstrap.ps1 `
+  -ManagementProfile management `
+  -Region us-east-1 `
+  -RequiredAccountCount 3 `
+  -Mode Plan
+
+pwsh .\scripts\Invoke-AwsOrganizationBootstrap.ps1 `
+  -ManagementProfile management `
+  -Region us-east-1 `
+  -RequiredAccountCount 3 `
+  -Mode Apply
 ```
 
-For a new organization foundation, review the account-creation plan first, then apply it only with the explicit organization approval. The process stops after account creation so member-account provisioning can complete:
+The federation orchestrator is the preferred production entry point when organization bootstrap, federation, and optional governance handoff need to be coordinated.
 
-```powershell
-pwsh .\scripts\Invoke-AwsEntraFederationBootstrap.ps1 `
-  -Mode Plan -OrganizationMode Plan `
-  -ConfigPath .\scripts\entra-aws-federation.local.json
+## Windows OpenSSH helper
 
-pwsh .\scripts\Invoke-AwsEntraFederationBootstrap.ps1 `
-  -Mode Apply -OrganizationMode Apply `
-  -ConfigPath .\scripts\entra-aws-federation.local.json `
-  -ApproveOrganizationChange
-```
-
-For an existing enterprise organization, use `-OrganizationMode Skip`. After the one-time AWS console steps and SCIM bootstrap are complete, Apply configures Entra, provisioning, Terraform inputs, and managed profiles. `-ApproveIdentitySourceChange` is still required because the first cutover can affect assignments:
-
-```powershell
-pwsh .\scripts\Invoke-AwsEntraFederationBootstrap.ps1 `
-  -Mode Apply -OrganizationMode Skip `
-  -ConfigPath .\scripts\entra-aws-federation.local.json `
-  -ApproveIdentitySourceChange
-```
-
-Add `-ApplyGovernance -ApproveTerraform` only after the member accounts, permission-set inputs, and Terraform plan are ready. The orchestrator refuses governance when the AWS account quota is pending and never submits a duplicate quota request without `-RequestQuota -ApproveQuota`.
-
-If the quota preflight reports `QuotaIncreaseRequired` and no request is open, add `-RequestQuota -ApproveQuota` to the Validate command to submit one. Do not use those switches again while the result is `Pending` or `CASE_OPENED`.
-
-The lower-level `Configure-AwsEntraFederation.ps1` commands below remain available for targeted SCIM rotation or recovery; use the bootstrap orchestrator for the normal production onboarding path.
-
-On successful Validate or Apply, inspect `phases.manualBootstrap.status` in `%ProgramData%\AwsEntraFederation\bootstrap-last-result.json`; it must be `verified`. The result includes the individual manual-step checks and failed-check names when validation cannot prove the cutover is working.
-
-### Targeted direct federation recovery
-
-Use these lower-level commands only when the orchestrator is not the right recovery path:
-
-Run a read-only preflight first:
-
-```powershell
-pwsh .\scripts\Configure-AwsEntraFederation.ps1 `
-  -Mode Validate `
-  -ConfigPath .\scripts\entra-aws-federation.local.json
-```
-
-After completing the one-time AWS console bootstrap and reviewing the result, a direct targeted Apply can configure Entra, SCIM, managed AWS CLI profiles, and optional Terraform assignments:
-
-```powershell
-pwsh .\scripts\Configure-AwsEntraFederation.ps1 `
-  -Mode Apply `
-  -ConfigPath .\scripts\entra-aws-federation.local.json `
-  -ApproveIdentitySourceChange `
-  -ApplyTerraform
-```
-
-The script creates only profiles in its managed block and preserves unrelated AWS profiles. Generated governance assignment variables are written to the ignored `stages/02-governance/federation.auto.tfvars.json` file. Human AWS CLI authentication remains interactive through `aws sso login`.
-
-### Enabling SSH access to the Windows VM
-
-The normal Windows Features-on-Demand route can fail when the VM cannot reach Windows Update or lacks matching ARM64 Features-on-Demand media. For this VM, use the official open-source Microsoft `PowerShell/Win32-OpenSSH` GitHub MSI instead. The pinned installer supports Windows 11 ARM64 and is SHA-256 verified by `scripts/Install-WindowsOpenSSHFromGitHub.ps1`.
-
-From an elevated PowerShell window inside the Windows VM, run the GitHub installer script with an OpenSSH public key. Generate the key on the Mac if needed; copy only the `.pub` line into the VM:
-
-```powershell
-.\scripts\Install-WindowsOpenSSHFromGitHub.ps1 `
-  -UserName "$env:USERDOMAIN\$env:USERNAME" `
-  -AuthorizedKey "ssh-ed25519 AAAA... workstation-key"
-```
-
-First test the key-based connection from the Mac. If it works, rerun the command with `-DisablePasswordAuthentication`. The script downloads only the pinned official GitHub release, verifies its hash, installs and starts OpenSSH Server, creates a TCP/22 firewall rule for the selected profile, restricts the authorized-key file ACL, validates `sshd_config`, and prints the VM address. It does not create, request, or store a private key. Use `-FirewallProfile Any` only when the VM network is intentionally host-only/NAT and the broader Windows firewall profile is understood. The existing `Enable-WindowsOpenSSHForCodex.ps1` remains available for systems where the built-in Windows capability works.
+When Windows Features-on-Demand cannot install OpenSSH on the target VM, `scripts/Install-WindowsOpenSSHFromGitHub.ps1` installs the repository's pinned official Microsoft Win32-OpenSSH release and verifies its SHA-256 hash. Run it from an elevated PowerShell session with an SSH public key. It does not create or store a private key. The older `Enable-WindowsOpenSSHForCodex.ps1` remains available for systems where the built-in Windows capability works.
 
 ## Validation
 
+Run formatting and Terraform validation from the repository root:
+
 ```bash
 terraform fmt -check -recursive
-terraform -chdir=stages/01-organization init -backend=false
-terraform -chdir=stages/01-organization validate
-terraform -chdir=stages/02-governance init -backend=false
-terraform -chdir=stages/02-governance validate
-terraform -chdir=stages/03-production init -backend=false
-terraform -chdir=stages/03-production validate
+
+for stage in 00-state-bucket 01-organization 02-governance 03-production 04-entra-access; do
+  terraform -chdir="stages/$stage" init -backend=false
+  terraform -chdir="stages/$stage" validate
+done
 ```
+
+On Windows, run the PowerShell tests after installing Pester:
+
+```powershell
+Invoke-Pester -Path .\tests\Configure-AwsEntraFederation.Tests.ps1 -Output Detailed
+```
+
+Validation proves syntax and static safety only. It does not prove AWS account access, quota readiness, SAML/SCIM health, physical account provisioning, or a successful end-to-end SSO login. Use the runbook's acceptance checklist for those checks.
+
+## Repository layout
+
+```text
+stages/00-state-bucket/       Remote-state bootstrap
+stages/01-organization/       Organization, OUs, and member accounts
+stages/02-governance/         CloudTrail, log archive, permission sets
+stages/03-production/         Production secret baseline
+stages/04-entra-access/       Entra security group
+scripts/                      Adoption, quota, federation, and OpenSSH tools
+docs/                         Production federation runbook
+tests/                        Pester static-safety tests
+```
+
+Review every plan. In particular, treat organization/account creation, identity-source changes, permission-set assignments, quota requests, IAM policy changes, CloudTrail bucket policies, and secret-access roles as explicit approval boundaries.
