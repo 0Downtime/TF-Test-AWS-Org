@@ -1,5 +1,12 @@
 .terraform/
 *.tfstate
 *.tfstate.*
+*.tfplan
+backend.hcl
+terraform.tfvars
 crash.log
-.terraform.lock.hcl
+scripts/*.local.json
+stages/02-governance/federation.auto.tfvars.json
+scripts/aws-terraform-adoption-plan*.json
+stages/01-organization/*.tfplan
+stages/02-governance/federation.auto.tfvars.json.bak
