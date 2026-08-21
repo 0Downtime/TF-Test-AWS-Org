@@ -1,0 +1,29 @@
+management_account_id = "000000000000"
+management_profile     = "management"
+management_region      = "us-east-1"
+
+production_account_id = "222222222222"
+production_region     = "us-east-1"
+
+# Globally unique. This bucket remains private; CloudFront publishes only the
+# two OIDC documents through its default HTTPS hostname.
+oidc_bucket_name = "replace-with-a-globally-unique-gitlab-oidc-name"
+
+# Leave false for the first apply. Publish the metadata and configure GitLab,
+# then set true for the second apply.
+create_aws_oidc_resources = false
+
+gitlab_oidc_audience = "sts.amazonaws.com"
+
+# Example for the protected main branch of this repository's GitLab project.
+# gitlab_subject = "project_path:YOUR_GROUP/YOUR_PROJECT:ref_type:branch:ref:main"
+
+# Leave null until the exact deployment permissions are reviewed.
+# gitlab_role_policy_json = jsonencode({
+#   Version = "2012-10-17"
+#   Statement = [{
+#     Effect   = "Allow"
+#     Action   = ["sts:GetCallerIdentity"]
+#     Resource = "*"
+#   }]
+# })

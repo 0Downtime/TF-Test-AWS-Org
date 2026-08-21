@@ -13,6 +13,7 @@ The supported workflow uses the directories under `stages/`. Each stage has its 
 | `02-governance` | Creates the log-archive bucket, organization CloudTrail, IAM Identity Center permission sets, and optional group assignments. | Management account plus `OrganizationAccountAccessRole` in the log-archive account |
 | `03-production` | Creates an empty, protected Secrets Manager secret and an optional least-privilege access role in the production account. | Management account plus `OrganizationAccountAccessRole` in the production account |
 | `04-entra-access` | Creates the optional non-mail-enabled Entra security group used by the Secrets Manager access mapping. | Current Azure CLI login |
+| `05-gitlab-oidc` | Publishes a private S3/CloudFront OIDC metadata mirror and optionally creates a production-account GitLab OIDC provider and role. | Management account plus `OrganizationAccountAccessRole` in the production account |
 
 The federation scripts configure Entra SAML, SCIM provisioning, managed AWS CLI SSO profiles, and generated Terraform assignment inputs. The first IAM Identity Center identity-source cutover and SCIM setup still require an AWS/Entra console workflow; see the [production federation runbook](docs/entra-aws-federation-production-runbook.md).
 
@@ -44,6 +45,8 @@ wait for member accounts and OrganizationAccountAccessRole
 03 production baseline
       |
 04 optional Entra group -> manual SAML/SCIM -> federation automation
+      |
+05 optional private GitLab OIDC mirror -> GitLab CI temporary AWS credentials
 ```
 
 The Entra and federation path is optional. If group assignments are enabled, complete stage 02 permission-set setup first, then provision the Entra group and rerun the governance plan after the federation script generates the SCIM group ID mapping.
@@ -156,6 +159,20 @@ pwsh .\scripts\Invoke-AwsEntraFederationBootstrap.ps1 `
 
 Start from the example configuration, keep the local copy ignored, and supply SCIM credentials only through the secure prompt or a local secure parameter. `Apply` requires explicit approval for the identity-source boundary; organization creation, quota requests, and governance apply have separate approvals.
 
+### 6. Optional private GitLab OIDC
+
+Stage 05 supports GitLab Self-Managed instances that are not publicly reachable. AWS STS still needs public HTTPS access to the OIDC discovery document and JWKS, so the stage creates a private S3 bucket behind a CloudFront distribution. Only these two documents are published; the GitLab UI and runner can remain private.
+
+The workflow is intentionally two-phase:
+
+1. Apply stage 05 with `create_aws_oidc_resources = false` to create the private bucket and CloudFront distribution.
+2. Run `terraform output` and publish the private GitLab discovery/JWKS responses with `scripts/Publish-GitLabOidcMetadata.ps1`.
+3. Configure GitLab's `ci_id_tokens_issuer_url` to the stage's `gitlab_oidc_issuer_url`, reconfigure GitLab, and run `ci:validate_id_token_configuration`.
+4. Set `create_aws_oidc_resources = true`, set the exact protected-project `gitlab_subject`, and supply a reviewed least-privilege `gitlab_role_policy_json`.
+5. Apply the saved plan and use the role ARN in a GitLab job with an `id_tokens` block. See [the private GitLab OIDC runbook](docs/gitlab-oidc-private-instance.md).
+
+Do not use the existing Terraform-state or CloudTrail buckets for this mirror. Do not attach `AdministratorAccess` to the GitLab role. The role is a workload identity and is separate from the Entra/IAM Identity Center human-access path.
+
 ## Existing-environment adoption and account quota
 
 The organization stage is configuration-driven. To generate a read-only adoption plan from Windows, copy the example outside source control or to an ignored local path:
@@ -210,7 +227,7 @@ Run formatting and Terraform validation from the repository root:
 ```bash
 terraform fmt -check -recursive
 
-for stage in 00-state-bucket 01-organization 02-governance 03-production 04-entra-access; do
+for stage in 00-state-bucket 01-organization 02-governance 03-production 04-entra-access 05-gitlab-oidc; do
   terraform -chdir="stages/$stage" init -backend=false
   terraform -chdir="stages/$stage" validate
 done
@@ -232,8 +249,10 @@ stages/01-organization/       Organization, OUs, and member accounts
 stages/02-governance/         CloudTrail, log archive, permission sets
 stages/03-production/         Production secret baseline
 stages/04-entra-access/       Entra security group
+stages/05-gitlab-oidc/        Private GitLab OIDC mirror and workload role
 scripts/                      Adoption, quota, federation, and OpenSSH tools
-docs/                         Production federation runbook
+examples/                     CI configuration examples
+docs/                         Federation and private GitLab OIDC runbooks
 tests/                        Pester static-safety tests
 ```
 

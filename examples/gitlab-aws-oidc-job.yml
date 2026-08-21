@@ -1,0 +1,19 @@
+# Adapt this job to the project that should deploy to AWS. Keep the role ARN
+# and this job's branch/ref aligned with the IAM trust policy.
+deploy-to-aws:
+  image: amazon/aws-cli:2
+
+  id_tokens:
+    GITLAB_OIDC_TOKEN:
+      aud: sts.amazonaws.com
+
+  variables:
+    AWS_ROLE_ARN: arn:aws:iam::PRODUCTION_ACCOUNT_ID:role/GitLabProductionDeploy
+    AWS_DEFAULT_REGION: us-east-1
+
+  script:
+    # Do not echo the token. The file is job-local and disappears with the job.
+    - printf '%s' "$GITLAB_OIDC_TOKEN" > "$CI_PROJECT_DIR/.gitlab-oidc-token"
+    - export AWS_WEB_IDENTITY_TOKEN_FILE="$CI_PROJECT_DIR/.gitlab-oidc-token"
+    - aws sts get-caller-identity
+    - ./deploy.sh
