@@ -231,6 +231,8 @@ for stage in 00-state-bucket 01-organization 02-governance 03-production 04-entr
   terraform -chdir="stages/$stage" init -backend=false
   terraform -chdir="stages/$stage" validate
 done
+
+terraform -chdir=stages/05-gitlab-oidc test
 ```
 
 On Windows, run the PowerShell tests after installing Pester:
