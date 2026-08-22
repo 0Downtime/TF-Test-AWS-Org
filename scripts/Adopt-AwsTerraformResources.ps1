@@ -20,43 +20,7 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
-
-function Get-ConfigValue {
-    param(
-        [Parameter(Mandatory = $true)]
-        [object]$Object,
-
-        [Parameter(Mandatory = $true)]
-        [string]$Name,
-
-        [object]$Default = $null
-    )
-
-    if ($null -ne $Object -and $Object.PSObject.Properties.Name -contains $Name) {
-        return $Object.$Name
-    }
-
-    return $Default
-}
-
-function Invoke-AwsJson {
-    param(
-        [Parameter(Mandatory = $true)]
-        [string[]]$Arguments
-    )
-
-    $output = @(& aws @Arguments 2>&1)
-    if ($LASTEXITCODE -ne 0) {
-        throw "AWS CLI failed: $($output -join ' ')"
-    }
-
-    $text = $output -join [Environment]::NewLine
-    if ([string]::IsNullOrWhiteSpace($text)) {
-        return $null
-    }
-
-    return $text | ConvertFrom-Json
-}
+Import-Module (Join-Path $PSScriptRoot 'lib/AwsTerraform.Common.psm1') -Force
 
 function Test-AwsCommand {
     param(
@@ -333,7 +297,7 @@ if ([string]::IsNullOrWhiteSpace($OutputPath)) {
     $OutputPath = Join-Path $configDirectory 'aws-terraform-adoption-plan.json'
 }
 
-$plan | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $OutputPath -Encoding utf8NoBOM
+Write-JsonFile -InputObject $plan -Path $OutputPath -Depth 10
 
 if ($Mode -eq 'Validate') {
     Write-Output "Validated adoption configuration. Plan written to $OutputPath"
