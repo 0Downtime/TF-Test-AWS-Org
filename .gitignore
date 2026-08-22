@@ -6,7 +6,13 @@
 backend.hcl
 terraform.tfvars
 crash.log
-scripts/*.local.json
+*.local.json
+*.xml
+*.pem
+*.p12
+*.pfx
+*.key
+*.cer
 stages/02-governance/federation.auto.tfvars.json
 scripts/aws-terraform-adoption-plan*.json
 stages/01-organization/*.tfplan
