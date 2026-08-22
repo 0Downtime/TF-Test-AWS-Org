@@ -1,0 +1,25 @@
+management_account_id = "000000000000"
+aws_profile            = "management"
+aws_region             = "us-east-1"
+
+# Use a dedicated bucket containing only these two public OIDC metadata objects.
+metadata_bucket_name = "replace-with-a-globally-unique-gitlab-oidc-bucket"
+
+# First apply with both IAM creation flags false. Synchronize the two objects,
+# set GitLab's ci_id_tokens_issuer_url to the output issuer_url, and validate it.
+enable_iam_oidc_provider = false
+create_gitlab_role       = false
+
+oidc_audience = "sts.amazonaws.com"
+
+# Exact sub claim(s) for protected GitLab refs. Example default GitLab subject:
+# allowed_subjects = ["project_path:group/project:ref_type:branch:ref:main"]
+allowed_subjects = []
+
+# Attach only reviewed workload policies. Do not grant AdministratorAccess by default.
+gitlab_role_policy_arns = []
+
+# Optional trusted-runner role for the sync script. Prefer an instance/task role
+# or a named profile over long-lived access keys.
+create_metadata_sync_role   = false
+metadata_sync_principal_arns = []
