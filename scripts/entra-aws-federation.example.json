@@ -38,6 +38,12 @@
       "entraGroup": "REPLACE_WITH_ENVIRONMENT_GROUP_PREFIX-SecretsManagerAdminReadOnly",
       "permissionSet": "SecretsManagerAdminReadOnly",
       "accountIds": ["all-active-accounts"]
+    },
+    {
+      "name": "production-administrators",
+      "entraGroup": "AWS-Production-Administrators",
+      "permissionSet": "AdministratorAccess",
+      "accountIds": ["REPLACE_WITH_PRODUCTION_ACCOUNT_ID"]
     }
   ]
 }
