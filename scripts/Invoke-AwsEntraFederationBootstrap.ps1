@@ -29,6 +29,7 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $env:AWS_PAGER = ''
+Import-Module (Join-Path $PSScriptRoot 'lib/AwsTerraform.Common.psm1') -Force
 
 $script:RootPath = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).Path
 $script:SecretStorePath = Join-Path ([Environment]::GetFolderPath('CommonApplicationData')) 'AwsEntraFederation'
@@ -41,31 +42,6 @@ $script:Result = [ordered]@{
     organizationMode = $OrganizationMode
     phases = [ordered]@{}
     warnings = @()
-}
-
-function Get-ConfigValue {
-    param(
-        [Parameter(Mandatory = $true)]$Object,
-        [Parameter(Mandatory = $true)][string]$Name,
-        $Default = $null
-    )
-
-    if ($null -eq $Object) {
-        return $Default
-    }
-
-    if ($Object -is [Collections.IDictionary] -and $Object.Contains($Name)) {
-        $value = $Object[$Name]
-        if ($null -eq $value) { return $Default }
-        return $value
-    }
-
-    $property = $Object.PSObject.Properties[$Name]
-    if ($null -eq $property -or $null -eq $property.Value) {
-        return $Default
-    }
-
-    return $property.Value
 }
 
 function Read-BootstrapConfig {
@@ -372,7 +348,7 @@ function Write-OnboardingResult {
     $target = if ([string]::IsNullOrWhiteSpace($OutputPath)) { $DefaultPath } else { $OutputPath }
     $parent = Split-Path -Parent $target
     if ($parent) { New-Item -ItemType Directory -Path $parent -Force | Out-Null }
-    $script:Result | ConvertTo-Json -Depth 30 | Set-Content -LiteralPath $target -Encoding utf8NoBOM
+        Write-JsonFile -InputObject $script:Result -Path $target -Depth 30
     $script:Result | ConvertTo-Json -Depth 30
 }
 
@@ -417,6 +393,6 @@ catch {
     $target = if ([string]::IsNullOrWhiteSpace($OutputPath)) { Join-Path $script:SecretStorePath 'bootstrap-last-result.json' } else { $OutputPath }
     $parent = Split-Path -Parent $target
     if ($parent) { New-Item -ItemType Directory -Path $parent -Force | Out-Null }
-    $script:Result | ConvertTo-Json -Depth 30 | Set-Content -LiteralPath $target -Encoding utf8NoBOM
+    Write-JsonFile -InputObject $script:Result -Path $target -Depth 30
     throw
 }
