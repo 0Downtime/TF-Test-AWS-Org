@@ -30,20 +30,7 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $quotaCode = 'L-E619E033'
-
-function Invoke-AwsJson {
-    param(
-        [Parameter(Mandatory = $true)]
-        [string[]]$Arguments
-    )
-
-    $output = @(& aws @Arguments 2>&1)
-    if ($LASTEXITCODE -ne 0) {
-        throw "AWS CLI failed: $($output -join ' ')"
-    }
-
-    return (($output -join [Environment]::NewLine) | ConvertFrom-Json)
-}
+Import-Module (Join-Path $PSScriptRoot 'lib/AwsTerraform.Common.psm1') -Force
 
 function Get-Request {
     param(
@@ -134,7 +121,7 @@ if ($Mode -eq 'Request' -and -not $isReady) {
 }
 
 if (-not [string]::IsNullOrWhiteSpace($OutputPath)) {
-    $result | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $OutputPath -Encoding utf8NoBOM
+    Write-JsonFile -InputObject $result -Path $OutputPath -Depth 10
 }
 
 $result | ConvertTo-Json -Depth 10 | Write-Output

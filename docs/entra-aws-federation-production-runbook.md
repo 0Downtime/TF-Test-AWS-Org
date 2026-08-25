@@ -92,7 +92,7 @@ Set these values for the target environment:
 - entra.tenantId, entra.clientId, and entra.certificateThumbprint.
 - entra.applicationDisplayName, normally AWS IAM Identity Center.
 - entra.applicationTemplateId, if the current AWS gallery template ID is known.
-- accessMappings: unique Entra group names, Terraform permission-set names, and explicit account IDs or all-active-accounts.
+- accessMappings: unique Entra group names, Terraform permission-set names, and explicit account IDs or all-active-accounts. Supported permission sets include `SecurityAudit`, `BillingReadOnly`, `SecretsManagerAdminReadOnly`, and `AdministratorAccess`.
 
 Do not put a SCIM token, private key, Graph secret, or password in this JSON file.
 
@@ -240,13 +240,25 @@ pwsh -NoProfile -File .\scripts\Invoke-AwsEntraFederationBootstrap.ps1 -Mode App
 
 Review the generated ignored file at stages\02-governance\federation.auto.tfvars.json.
 
-Do not use `-ApplyGovernance` while the organization lacks the accounts and inputs required by stage 02-governance. Review the generated governance plan before enabling the optional governance handoff.
+Do not use `-ApplyGovernance` while the organization lacks the accounts and inputs required by stage 02-governance. With `-ApplyGovernance`, the script creates and applies the exact saved `federation-governance.tfplan` after generating the assignment variables. If a separate human review is required between plan and apply, omit `-ApplyGovernance`, inspect the generated `federation.auto.tfvars.json`, run `terraform plan -out=federation-governance.tfplan` from `stages/02-governance`, and apply that reviewed plan separately.
 
 The script writes only its managed AWS CLI SSO block and preserves unrelated profiles. After Terraform creates the permission sets and assignments:
 
 ~~~powershell
 aws sso login --profile <managed-profile>
 aws sts get-caller-identity --profile <managed-profile>
+~~~
+
+### Production administrator group
+
+The same Entra stage creates `AWS-Production-Administrators`, a separate non-mail-enabled security group mapped to the AWS `AdministratorAccess` permission set. Set its membership through the company's existing access-control solution; this repository does not configure PIM. Target the mapping to the production account ID rather than `all-active-accounts` unless full administration across every active account is intended. Do not use this group for routine access when `SecurityAudit` or `SecretsManagerAdminReadOnly` is sufficient.
+
+Replace the example mapping's `REPLACE_WITH_PRODUCTION_ACCOUNT_ID` value with the real production account ID in the ignored local federation configuration before running Apply.
+
+If the group already exists, import it before planning:
+
+~~~powershell
+terraform -chdir=stages/04-entra-access import azuread_group.production_administrators /groups/<administrator-group-object-id>
 ~~~
 
 ## 10. End-to-end acceptance test

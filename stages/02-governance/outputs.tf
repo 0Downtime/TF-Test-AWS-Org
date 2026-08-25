@@ -22,3 +22,8 @@ output "secrets_manager_permission_set_arn" {
   description = "Permission set ARN for full Secrets Manager plus read-only access elsewhere."
   value       = aws_ssoadmin_permission_set.secrets_manager.arn
 }
+
+output "administrator_permission_set_arn" {
+  description = "Permission set ARN for explicitly approved full administrator access."
+  value       = aws_ssoadmin_permission_set.administrator.arn
+}
