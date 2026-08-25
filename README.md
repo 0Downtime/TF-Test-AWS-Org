@@ -20,6 +20,9 @@ The federation scripts configure Entra SAML, SCIM provisioning, managed AWS CLI 
 The private GitLab OIDC mirror, synchronization script, two-phase bootstrap, and protected-ref acceptance checks are documented in the [private GitLab OIDC runbook](docs/gitlab-private-oidc-runbook.md).
 
 Terraform configuration lives under `stages/`, with independent state and deployment boundaries per stage. Run Terraform from a stage directory, not from the repository root.
+The Azure DevOps deployment workflow is defined in [`azure-pipelines.yml`](azure-pipelines.yml). It uses temporary AWS OIDC credentials, secure files for ignored Terraform inputs, sequential saved-plan applies, and protected deployment environments. See the [Azure DevOps Terraform pipeline setup guide](docs/azure-devops-terraform-pipeline.md) before enabling it.
+
+The root-level Terraform files are the original monolithic configuration and are not part of the supported staged workflow. Run Terraform from a stage directory, not from the repository root. The staged configuration is the maintained path for new deployments and existing-environment adoption.
 
 ## Prerequisites
 
