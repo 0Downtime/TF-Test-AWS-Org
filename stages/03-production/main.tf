@@ -9,7 +9,23 @@ resource "aws_secretsmanager_secret" "production" {
   }
 }
 
-data "aws_iam_policy_document" "production_secrets" {
+data "aws_iam_policy_document" "production_secrets_read" {
+  statement {
+    sid    = "ReadSecret"
+    effect = "Allow"
+
+    actions = [
+      "secretsmanager:DescribeSecret",
+      "secretsmanager:GetSecretValue",
+      "secretsmanager:GetResourcePolicy",
+      "secretsmanager:ListSecretVersionIds",
+    ]
+
+    resources = [aws_secretsmanager_secret.production.arn]
+  }
+}
+
+data "aws_iam_policy_document" "production_secrets_read_write" {
   statement {
     sid    = "ReadSecret"
     effect = "Allow"
@@ -39,12 +55,20 @@ data "aws_iam_policy_document" "production_secrets" {
   }
 }
 
-resource "aws_iam_policy" "production_secrets" {
+resource "aws_iam_policy" "production_secrets_read" {
   count = length(var.production_trusted_principal_arns) == 0 ? 0 : 1
 
-  name        = "ProductionSecretAccess"
-  description = "Least-privilege access to the baseline production secret."
-  policy      = data.aws_iam_policy_document.production_secrets.json
+  name        = "SecretsManagerRead"
+  description = "Read-only access to the baseline production secret."
+  policy      = data.aws_iam_policy_document.production_secrets_read.json
+}
+
+resource "aws_iam_policy" "production_secrets_read_write" {
+  count = length(var.production_trusted_principal_arns) == 0 ? 0 : 1
+
+  name        = "SecretsManagerReadWrite"
+  description = "Read and write access to the baseline production secret."
+  policy      = data.aws_iam_policy_document.production_secrets_read_write.json
 }
 
 resource "aws_iam_role" "production_secrets" {
@@ -66,5 +90,5 @@ resource "aws_iam_role_policy_attachment" "production_secrets" {
   count = length(var.production_trusted_principal_arns) == 0 ? 0 : 1
 
   role       = aws_iam_role.production_secrets[0].name
-  policy_arn = aws_iam_policy.production_secrets[0].arn
+  policy_arn = aws_iam_policy.production_secrets_read[0].arn
 }

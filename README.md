@@ -125,7 +125,7 @@ terraform -chdir=stages/03-production apply tfplan
 terraform -chdir=stages/03-production output
 ```
 
-Stage 03 creates a secret container but never stores a secret value. The optional `production_trusted_principal_arns` input creates a role with access only to that baseline secret; leave it empty until a real workload or administration principal exists.
+Stage 03 creates a secret container but never stores a secret value. The optional `production_trusted_principal_arns` input creates a role with the `SecretsManagerRead` policy attached, plus separate `SecretsManagerRead` and `SecretsManagerReadWrite` policy ARNs. Attach the read/write policy only to an explicitly approved principal that needs to update the baseline secret; leave the input empty until a real workload or administration principal exists.
 
 ### 5. Optional Entra access and federation
 
