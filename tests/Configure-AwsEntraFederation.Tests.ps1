@@ -1,6 +1,11 @@
 BeforeAll {
     $scriptPath = Join-Path $PSScriptRoot '..\scripts\Configure-AwsEntraFederation.ps1'
     $scriptText = Get-Content -LiteralPath $scriptPath -Raw
+    $commonModulePath = Join-Path $PSScriptRoot '..\scripts\lib\AwsTerraform.Common.psm1'
+    $commonModuleText = Get-Content -LiteralPath $commonModulePath -Raw
+    $terraformModulePath = Join-Path $PSScriptRoot '..\scripts\lib\Terraform.Plan.psm1'
+    $terraformModuleText = Get-Content -LiteralPath $terraformModulePath -Raw
+    Import-Module $commonModulePath -Force
 }
 
 Describe 'Configure-AwsEntraFederation.ps1 static safety checks' {
@@ -19,7 +24,42 @@ Describe 'Configure-AwsEntraFederation.ps1 static safety checks' {
     It 'uses DPAPI-backed secure storage and redacted output' {
         $scriptText | Should -Match 'ConvertFrom-SecureString'
         $scriptText | Should -Match 'SecretStorePath'
-        $scriptText | Should -Match 'redacted'
+        $commonModuleText | Should -Match 'redacted'
+    }
+
+    It 'uses the shared AWS/Terraform helper module' {
+        $scriptText | Should -Match "Import-Module .*AwsTerraform.Common.psm1"
+        $scriptText | Should -Match "Import-Module .*Terraform.Plan.psm1"
+        $commonModuleText | Should -Match 'function Invoke-AwsJson'
+        $commonModuleText | Should -Match 'function Write-JsonFile'
+        $terraformModuleText | Should -Match 'function Invoke-TerraformSavedPlan'
+    }
+
+    It 'redacts credential-shaped AWS CLI error text' {
+        ConvertTo-RedactedAwsOutput -Output @('Authorization: Bearer abc123', 'other detail') |
+            Should -Be "Authorization=<redacted>`nother detail"
+    }
+
+    It 'resolves values from both JSON-like objects and dictionaries' {
+        Get-ConfigValue -Object ([pscustomobject]@{ name = 'object-value' }) -Name 'name' |
+            Should -Be 'object-value'
+        Get-ConfigValue -Object @{ name = 'dictionary-value' } -Name 'name' |
+            Should -Be 'dictionary-value'
+        Get-ConfigValue -Object ([pscustomobject]@{}) -Name 'missing' -Default 'fallback' |
+            Should -Be 'fallback'
+    }
+
+    It 'writes JSON through the shared helper' {
+        $path = Join-Path $TestDrive 'result.json'
+        Write-JsonFile -InputObject ([ordered]@{ status = 'ok' }) -Path $path -Depth 5
+        (Get-Content -LiteralPath $path -Raw | ConvertFrom-Json).status | Should -Be 'ok'
+    }
+
+    It 'creates and applies a saved Terraform plan for governance handoff' {
+        $scriptText | Should -Match 'Invoke-TerraformSavedPlan'
+        $terraformModuleText | Should -Match 'terraform.*plan.*-input=false.*-out='
+        $terraformModuleText | Should -Match 'terraform.*apply.*-input=false.*\$plan'
+        $terraformModuleText | Should -Not -Match 'terraform.*apply\s+-auto-approve'
     }
 
     It 'preserves unrelated AWS configuration with a managed block' {
@@ -45,6 +85,8 @@ Describe 'Federation configuration examples' {
         $config.bootstrap.requestedAccountQuota | Should -BeGreaterOrEqual $config.bootstrap.requiredAccountCount
         $config.entra | Should -Not -BeNullOrEmpty
         @($config.accessMappings).Count | Should -BeGreaterThan 0
+        @($config.accessMappings | Where-Object permissionSet -eq 'AdministratorAccess').Count | Should -Be 1
+        @($config.accessMappings | Where-Object entraGroup -eq 'AWS-Production-Administrators').Count | Should -Be 1
     }
 
     It 'does not include a SCIM token or private key' {

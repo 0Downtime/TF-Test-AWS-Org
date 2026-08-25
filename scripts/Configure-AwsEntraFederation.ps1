@@ -16,12 +16,15 @@ param(
     [switch]$ApproveIdentitySourceChange,
     [switch]$ApplyTerraform,
     [switch]$ForceManagedProfiles,
-    [string]$OutputPath
+    [string]$OutputPath,
+    [string]$TerraformPlanPath
 )
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 $env:AWS_PAGER = ''
+Import-Module (Join-Path $PSScriptRoot 'lib/AwsTerraform.Common.psm1') -Force
+Import-Module (Join-Path $PSScriptRoot 'lib/Terraform.Plan.psm1') -Force
 
 $script:SecretStorePath = Join-Path ([Environment]::GetFolderPath('CommonApplicationData')) 'AwsEntraFederation'
 $script:Result = [ordered]@{
@@ -32,37 +35,6 @@ $script:Result = [ordered]@{
     assignments = @()
     profiles = @()
     warnings = @()
-}
-
-function Get-ConfigValue {
-    param(
-        [Parameter(Mandatory = $true)]$Object,
-        [Parameter(Mandatory = $true)][string]$Name,
-        $Default = $null
-    )
-
-    if ($Object -is [Collections.IDictionary] -and $Object.Contains($Name)) {
-        $dictionaryValue = $Object[$Name]
-        if ($null -eq $dictionaryValue) {
-            return $Default
-        }
-        return $dictionaryValue
-    }
-
-    $property = $Object.PSObject.Properties[$Name]
-    if ($null -eq $property -or $null -eq $property.Value) {
-        return $Default
-    }
-
-    return $property.Value
-}
-
-function Require-Value {
-    param([string]$Name, $Value)
-
-    if ($null -eq $Value -or [string]::IsNullOrWhiteSpace([string]$Value)) {
-        throw "Configuration value '$Name' is required."
-    }
 }
 
 function Read-FederationConfig {
@@ -76,11 +48,11 @@ function Read-FederationConfig {
     if ($mappings.Count -eq 0) { throw "The configuration must contain at least one accessMappings entry." }
 
     foreach ($name in @('managementProfile', 'region', 'identityCenterRegion', 'startUrl', 'managedProfilePrefix')) {
-        Require-Value -Name "aws.$name" -Value (Get-ConfigValue -Object $aws -Name $name)
+        Assert-ValuePresent -Name "aws.$name" -Value (Get-ConfigValue -Object $aws -Name $name)
     }
 
     foreach ($name in @('tenantId', 'clientId', 'certificateThumbprint', 'applicationDisplayName')) {
-        Require-Value -Name "entra.$name" -Value (Get-ConfigValue -Object $entra -Name $name)
+        Assert-ValuePresent -Name "entra.$name" -Value (Get-ConfigValue -Object $entra -Name $name)
     }
 
     $groupNamePrefix = [string](Get-ConfigValue -Object $entra -Name 'groupNamePrefix')
@@ -96,21 +68,21 @@ function Read-FederationConfig {
         $accountIds = @(Get-ConfigValue -Object $mapping -Name 'accountIds' -Default @())
 
         if ([string]::IsNullOrWhiteSpace($groupName) -and -not [string]::IsNullOrWhiteSpace($groupSuffix)) {
-            Require-Value -Name 'entra.groupNamePrefix' -Value $groupNamePrefix
+            Assert-ValuePresent -Name 'entra.groupNamePrefix' -Value $groupNamePrefix
             $groupName = "$groupNamePrefix-$groupSuffix"
         }
 
-        Require-Value -Name 'accessMappings[].name' -Value $mappingName
-        Require-Value -Name "accessMappings[$mappingName].entraGroup" -Value $groupName
-        Require-Value -Name "accessMappings[$mappingName].permissionSet" -Value $permissionSet
+        Assert-ValuePresent -Name 'accessMappings[].name' -Value $mappingName
+        Assert-ValuePresent -Name "accessMappings[$mappingName].entraGroup" -Value $groupName
+        Assert-ValuePresent -Name "accessMappings[$mappingName].permissionSet" -Value $permissionSet
         if (-not $seenMappingNames.Add($mappingName)) {
             throw "Duplicate access mapping name '$mappingName'."
         }
         if ($accountIds.Count -eq 0) {
             throw "Access mapping '$mappingName' must contain at least one accountIds entry."
         }
-        if ($permissionSet -notin @('SecurityAudit', 'BillingReadOnly', 'SecretsManagerAdminReadOnly')) {
-            throw "Access mapping '$mappingName' uses unsupported permission set '$permissionSet'. Supported values are SecurityAudit, BillingReadOnly, and SecretsManagerAdminReadOnly."
+        if ($permissionSet -notin @('SecurityAudit', 'BillingReadOnly', 'SecretsManagerAdminReadOnly', 'AdministratorAccess')) {
+            throw "Access mapping '$mappingName' uses unsupported permission set '$permissionSet'. Supported values are SecurityAudit, BillingReadOnly, SecretsManagerAdminReadOnly, and AdministratorAccess."
         }
 
         $normalizedMappings.Add([pscustomobject]@{
@@ -126,30 +98,6 @@ function Read-FederationConfig {
         Entra = $entra
         AccessMappings = @($normalizedMappings)
     }
-}
-
-function Invoke-AwsCli {
-    param([Parameter(Mandatory = $true)][string[]]$Arguments)
-
-    if (-not (Get-Command aws -ErrorAction SilentlyContinue)) {
-        throw 'AWS CLI was not found. Install AWS CLI v2 for Windows first.'
-    }
-
-    $output = & aws @Arguments 2>&1
-    if ($LASTEXITCODE -ne 0) {
-        $safeOutput = ($output -join "`n") -replace '(?i)(token|secret|password|authorization)[^\r\n]*', '$1=<redacted>'
-        throw "AWS CLI failed:`n$safeOutput"
-    }
-
-    return $output
-}
-
-function Invoke-AwsJson {
-    param([Parameter(Mandatory = $true)][string[]]$Arguments)
-
-    $json = (Invoke-AwsCli -Arguments ($Arguments + @('--output', 'json'))) -join "`n"
-    if ([string]::IsNullOrWhiteSpace($json)) { return $null }
-    return $json | ConvertFrom-Json
 }
 
 function Invoke-AwsPreflight {
@@ -258,8 +206,8 @@ function Resolve-ScimBootstrap {
     $token = if ($secureToken) { Convert-SecureStringToPlainText -Value $secureToken } else { $null }
 
     if ($Mode -in @('Plan', 'Apply', 'RotateScimToken')) {
-        Require-Value -Name 'SCIM endpoint' -Value $endpoint
-        Require-Value -Name 'SCIM token' -Value $token
+        Assert-ValuePresent -Name 'SCIM endpoint' -Value $endpoint
+        Assert-ValuePresent -Name 'SCIM token' -Value $token
     }
 
     if ($Mode -eq 'RotateScimToken' -or ($ScimToken -and $endpoint)) {
@@ -710,7 +658,7 @@ function Write-TerraformFederationVariables {
             target_account_ids = @($assignment.accountIds)
         }
     }
-    $payload | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $relative -Encoding utf8NoBOM
+    Write-JsonFile -InputObject $payload -Path $relative -Depth 10
     return $relative
 }
 
@@ -781,7 +729,7 @@ function Write-Result {
     if ($target) {
         $parent = Split-Path -Parent $target
         if ($parent) { New-Item -ItemType Directory -Path $parent -Force | Out-Null }
-        $script:Result | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath $target -Encoding utf8NoBOM
+        Write-JsonFile -InputObject $script:Result -Path $target -Depth 20
     }
     $script:Result | ConvertTo-Json -Depth 20
 }
@@ -794,8 +742,8 @@ try {
     $awsMetadataPath = if ($AwsServiceProviderMetadataPath) { $AwsServiceProviderMetadataPath } else { [string](Get-ConfigValue -Object $config.Aws -Name 'serviceProviderMetadataPath') }
     $entraMetadataPath = if ($EntraIdentityProviderMetadataPath) { $EntraIdentityProviderMetadataPath } else { [string](Get-ConfigValue -Object $config.Entra -Name 'identityProviderMetadataPath') }
     if ($Mode -in @('Validate', 'Plan', 'Apply')) {
-        Require-Value -Name 'AWS service-provider metadata path' -Value $awsMetadataPath
-        Require-Value -Name 'Entra identity-provider metadata path' -Value $entraMetadataPath
+        Assert-ValuePresent -Name 'AWS service-provider metadata path' -Value $awsMetadataPath
+        Assert-ValuePresent -Name 'Entra identity-provider metadata path' -Value $entraMetadataPath
     }
     $awsMetadata = Read-AndValidateMetadata -Path $awsMetadataPath -Kind 'AWS service-provider'
     $entraMetadata = Read-AndValidateMetadata -Path $entraMetadataPath -Kind 'Entra identity-provider'
@@ -825,9 +773,13 @@ try {
 
         if ($ApplyTerraform -and $Mode -eq 'Apply') {
             $tfvars = Write-TerraformFederationVariables -Config $config -Assignments $assignments
-            Write-Information "Applying governance federation assignments from $tfvars..." -InformationAction Continue
-            & terraform -chdir=(Join-Path $PSScriptRoot '..\stages\02-governance') apply -auto-approve
-            if ($LASTEXITCODE -ne 0) { throw 'Terraform governance apply failed.' }
+            $governanceStage = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..\stages\02-governance')).Path
+            $planPath = if ([string]::IsNullOrWhiteSpace($TerraformPlanPath)) {
+                'federation-governance.tfplan'
+            } else {
+                $TerraformPlanPath
+            }
+            Invoke-TerraformSavedPlan -StagePath $governanceStage -PlanPath $planPath | Out-Null
         }
         Add-ManagedAwsCliProfiles -Config $config -Assignments $assignments | Out-Null
     }
@@ -843,7 +795,7 @@ catch {
     $script:Result.status = 'Failed'
     $script:Result.error = $_.Exception.Message
     if ($OutputPath) {
-        $script:Result | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath $OutputPath -Encoding utf8NoBOM
+        Write-JsonFile -InputObject $script:Result -Path $OutputPath -Depth 20
     }
     throw
 }

@@ -25,6 +25,7 @@ locals {
     SecurityAudit               = aws_ssoadmin_permission_set.security.arn
     BillingReadOnly             = try(aws_ssoadmin_permission_set.billing[0].arn, null)
     SecretsManagerAdminReadOnly = aws_ssoadmin_permission_set.secrets_manager.arn
+    AdministratorAccess         = aws_ssoadmin_permission_set.administrator.arn
   }
 }
 
@@ -209,6 +210,28 @@ resource "aws_ssoadmin_permission_set" "security" {
       error_message = "IAM Identity Center must be enabled before creating permission sets."
     }
   }
+}
+
+resource "aws_ssoadmin_permission_set" "administrator" {
+  provider         = aws.identity_center
+  instance_arn     = local.identity_center_instance_arn
+  name             = "AdministratorAccess"
+  description      = "Full administrator access for explicitly approved production administrators."
+  session_duration = "PT4H"
+
+  lifecycle {
+    precondition {
+      condition     = local.identity_center_instance_arn != null
+      error_message = "IAM Identity Center must be enabled before creating permission sets."
+    }
+  }
+}
+
+resource "aws_ssoadmin_managed_policy_attachment" "administrator" {
+  provider           = aws.identity_center
+  instance_arn       = local.identity_center_instance_arn
+  permission_set_arn = aws_ssoadmin_permission_set.administrator.arn
+  managed_policy_arn = "arn:aws:iam::aws:policy/AdministratorAccess"
 }
 
 resource "aws_ssoadmin_managed_policy_attachment" "security" {
