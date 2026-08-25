@@ -25,6 +25,7 @@ locals {
     SecurityAudit               = aws_ssoadmin_permission_set.security.arn
     BillingReadOnly             = try(aws_ssoadmin_permission_set.billing[0].arn, null)
     SecretsManagerAdminReadOnly = aws_ssoadmin_permission_set.secrets_manager.arn
+    SecretsManagerReadWrite     = aws_ssoadmin_permission_set.secrets_manager_crud.arn
     AdministratorAccess         = aws_ssoadmin_permission_set.administrator.arn
   }
 }
@@ -300,6 +301,69 @@ resource "aws_ssoadmin_permission_set_inline_policy" "secrets_manager" {
       Action   = ["secretsmanager:*"]
       Resource = "*"
     }]
+  })
+}
+
+resource "aws_ssoadmin_permission_set" "secrets_manager_crud" {
+  provider         = aws.identity_center
+  instance_arn     = local.identity_center_instance_arn
+  name             = var.secrets_manager_crud_permission_set_name
+  description      = "Core Secrets Manager CRUD access without wildcard Secrets Manager permissions."
+  session_duration = "PT4H"
+
+  lifecycle {
+    precondition {
+      condition     = local.identity_center_instance_arn != null
+      error_message = "IAM Identity Center must be enabled before creating permission sets."
+    }
+  }
+}
+
+resource "aws_ssoadmin_permission_set_inline_policy" "secrets_manager_crud" {
+  provider           = aws.identity_center
+  instance_arn       = local.identity_center_instance_arn
+  permission_set_arn = aws_ssoadmin_permission_set.secrets_manager_crud.arn
+
+  inline_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid      = "ListSecrets"
+        Effect   = "Allow"
+        Action   = ["secretsmanager:ListSecrets"]
+        Resource = "*"
+      },
+      {
+        Sid    = "ReadSecrets"
+        Effect = "Allow"
+        Action = [
+          "secretsmanager:DescribeSecret",
+          "secretsmanager:GetSecretValue",
+          "secretsmanager:GetResourcePolicy",
+          "secretsmanager:ListSecretVersionIds",
+        ]
+        Resource = "arn:aws:secretsmanager:*:*:secret:*"
+      },
+      {
+        Sid      = "CreateSecret"
+        Effect   = "Allow"
+        Action   = ["secretsmanager:CreateSecret"]
+        Resource = "*"
+      },
+      {
+        Sid    = "UpdateDeleteAndTagSecrets"
+        Effect = "Allow"
+        Action = [
+          "secretsmanager:PutSecretValue",
+          "secretsmanager:UpdateSecret",
+          "secretsmanager:DeleteSecret",
+          "secretsmanager:RestoreSecret",
+          "secretsmanager:TagResource",
+          "secretsmanager:UntagResource",
+        ]
+        Resource = "arn:aws:secretsmanager:*:*:secret:*"
+      },
+    ]
   })
 }
 
