@@ -33,6 +33,8 @@ The root-level Terraform files are the original monolithic configuration and are
 
 Do not commit `terraform.tfvars`, `backend.hcl`, local federation/adoption JSON, generated plan files, metadata XML, SCIM tokens, private keys, or DPAPI-protected files. Terraform state can contain sensitive infrastructure metadata; protect the state bucket and its access accordingly.
 
+The repository ignores host-local `*.tfvars`, `*.tfvars.json`, `*.hcl`, and `*.tfplan` files while keeping `*.hcl.example` templates and `.terraform.lock.hcl` files tracked. For the strongest protection when changing branches or working on multiple clones, keep the real variable and backend files outside the Git working tree and pass their paths with `-var-file` and `-backend-config`.
+
 ## Deployment order
 
 ```text
@@ -111,7 +113,7 @@ terraform -chdir=stages/02-governance apply tfplan
 terraform -chdir=stages/02-governance output
 ```
 
-Before applying, enable IAM Identity Center in the intended `identity_center_region`. Review the CloudTrail destination policy, account IDs, permission-set policies, and any configured group assignments. The `SecretsManagerAdminReadOnly` permission set combines AWS `ReadOnlyAccess` with an inline `secretsmanager:*` allow, while `AdministratorAccess` is full account administration; both require explicit approval.
+Before applying, enable IAM Identity Center in the intended `identity_center_region`. Review the CloudTrail destination policy, account IDs, permission-set policies, and any configured group assignments. The `SecretsManagerAdminReadOnly` permission set combines AWS `ReadOnlyAccess` with an inline `secretsmanager:*` allow. The separate `SecretsManagerReadWrite` permission set grants only core Secrets Manager list/read/create/update/delete/restore/tag operations and is the preferred routine path when those actions are sufficient. `AdministratorAccess` is full account administration; all three require explicit approval.
 
 ### 4. Apply the production baseline
 
