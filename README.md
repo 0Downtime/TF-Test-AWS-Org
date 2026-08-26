@@ -21,7 +21,7 @@ The private GitLab OIDC mirror, synchronization script, two-phase bootstrap, and
 
 The Azure DevOps deployment workflow is defined in [`azure-pipelines.yml`](azure-pipelines.yml). It uses temporary AWS OIDC credentials, secure files for ignored Terraform inputs, sequential saved-plan applies, and protected deployment environments. See the [Azure DevOps Terraform pipeline setup guide](docs/azure-devops-terraform-pipeline.md) before enabling it.
 
-The root-level Terraform files are the original monolithic configuration and are not part of the supported staged workflow. Run Terraform from a stage directory, not from the repository root. The staged configuration is the maintained path for new deployments and existing-environment adoption.
+Terraform configuration lives under `stages/`, with independent state and deployment boundaries per stage. Run Terraform from a stage directory, not from the repository root.
 
 ## Prerequisites
 
@@ -225,7 +225,7 @@ Run formatting and Terraform validation from the repository root:
 ```bash
 terraform fmt -check -recursive
 
-for stage in 00-state-bucket 01-organization 02-governance 03-production 04-entra-access; do
+for stage in 00-state-bucket 01-organization 02-governance 03-production 04-entra-access 05-gitlab-oidc; do
   terraform -chdir="stages/$stage" init -backend=false
   terraform -chdir="stages/$stage" validate
 done
