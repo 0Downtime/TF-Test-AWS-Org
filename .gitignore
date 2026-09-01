@@ -13,6 +13,8 @@ crash.log
 *.pfx
 *.key
 *.cer
+scripts/azuredevops/*.local.env
+.azuredevops-bootstrap/
 stages/02-governance/federation.auto.tfvars.json
 scripts/aws-terraform-adoption-plan*.json
 stages/01-organization/*.tfplan

@@ -1,0 +1,122 @@
+parameters:
+- name: job_name
+  type: string
+- name: display_name
+  type: string
+- name: stage_name
+  type: string
+- name: backend_secure_file
+  type: string
+- name: tfvars_secure_file
+  type: string
+- name: aws_service_connection
+  type: string
+- name: aws_region
+  type: string
+- name: condition
+  type: string
+  default: succeeded()
+- name: publish_artifact
+  type: boolean
+  default: false
+- name: use_azure_cli
+  type: boolean
+  default: false
+- name: azure_service_connection
+  type: string
+  default: ''
+
+jobs:
+- job: ${{ parameters.job_name }}
+  displayName: ${{ parameters.display_name }}
+  condition: ${{ parameters.condition }}
+  pool:
+    vmImage: ubuntu-latest
+  steps:
+  - checkout: self
+
+  - task: TerraformInstaller@1
+    displayName: Install Terraform
+    inputs:
+      terraformVersion: '1.10.5'
+
+  - task: DownloadSecureFile@1
+    name: stageBackend
+    displayName: Download backend configuration
+    inputs:
+      secureFile: ${{ parameters.backend_secure_file }}
+
+  - task: DownloadSecureFile@1
+    name: stageVars
+    displayName: Download Terraform variables
+    inputs:
+      secureFile: ${{ parameters.tfvars_secure_file }}
+
+  # The AWS Toolkit task creates temporary environment credentials from the
+  # OIDC service connection. Terraform never reads an AWS profile from disk.
+  - ${{ if eq(parameters.use_azure_cli, false) }}:
+    - task: AWSShellScript@1
+      displayName: Plan ${{ parameters.stage_name }} with AWS OIDC
+      inputs:
+        awsCredentials: ${{ parameters.aws_service_connection }}
+        regionName: ${{ parameters.aws_region }}
+        scriptType: inline
+        inlineScript: |
+          set -euo pipefail
+          aws sts get-caller-identity --output json
+          plan_dir="$BUILD_ARTIFACTSTAGINGDIRECTORY/terraform-plans/${{ parameters.stage_name }}"
+          mkdir -p "$plan_dir"
+          bash "$BUILD_SOURCESDIRECTORY/scripts/ci/terraform-stage.sh" plan \
+            "${{ parameters.stage_name }}" \
+            "$(stageVars.secureFilePath)" \
+            "$(stageBackend.secureFilePath)" \
+            "$plan_dir/${{ parameters.stage_name }}.tfplan" \
+            "$plan_dir/manifest.txt"
+
+  # Stage 04 needs both Azure CLI authentication and AWS credentials for its
+  # S3 backend. Capture only short-lived, masked AWS task credentials for the
+  # following AzureCLI task in this job.
+  - ${{ if eq(parameters.use_azure_cli, true) }}:
+    - task: AWSShellScript@1
+      name: captureAws
+      displayName: Acquire temporary AWS credentials for Entra stage
+      inputs:
+        awsCredentials: ${{ parameters.aws_service_connection }}
+        regionName: ${{ parameters.aws_region }}
+        scriptType: inline
+        inlineScript: |
+          set -euo pipefail
+          aws sts get-caller-identity --output json
+          echo "##vso[task.setvariable variable=awsAccessKeyId;isSecret=true]$AWS_ACCESS_KEY_ID"
+          echo "##vso[task.setvariable variable=awsSecretAccessKey;isSecret=true]$AWS_SECRET_ACCESS_KEY"
+          echo "##vso[task.setvariable variable=awsSessionToken;isSecret=true]$AWS_SESSION_TOKEN"
+
+    - task: AzureCLI@2
+      displayName: Plan ${{ parameters.stage_name }} with Azure WIF and AWS OIDC
+      inputs:
+        azureSubscription: ${{ parameters.azure_service_connection }}
+        scriptType: bash
+        scriptLocation: inlineScript
+        inlineScript: |
+          set -euo pipefail
+          az account show --output json
+          aws sts get-caller-identity --output json
+          plan_dir="$BUILD_ARTIFACTSTAGINGDIRECTORY/terraform-plans/${{ parameters.stage_name }}"
+          mkdir -p "$plan_dir"
+          bash "$BUILD_SOURCESDIRECTORY/scripts/ci/terraform-stage.sh" plan \
+            "${{ parameters.stage_name }}" \
+            "$(stageVars.secureFilePath)" \
+            "$(stageBackend.secureFilePath)" \
+            "$plan_dir/${{ parameters.stage_name }}.tfplan" \
+            "$plan_dir/manifest.txt"
+      env:
+        AWS_ACCESS_KEY_ID: $(awsAccessKeyId)
+        AWS_SECRET_ACCESS_KEY: $(awsSecretAccessKey)
+        AWS_SESSION_TOKEN: $(awsSessionToken)
+
+  - ${{ if eq(parameters.publish_artifact, true) }}:
+    - task: PublishPipelineArtifact@1
+      displayName: Publish ${{ parameters.stage_name }} Terraform plan
+      inputs:
+        targetPath: '$(Build.ArtifactStagingDirectory)/terraform-plans/${{ parameters.stage_name }}'
+        artifact: 'tfplan-${{ parameters.stage_name }}'
