@@ -28,13 +28,24 @@
         "organizations:DescribeCreateAccountStatus",
         "organizations:DescribeOrganizationalUnit",
         "organizations:DescribeOrganization",
+        "organizations:DescribePolicy",
         "organizations:ListAccounts",
+        "organizations:ListAccountsForParent",
+        "organizations:ListAWSServiceAccessForOrganization",
+        "organizations:ListChildren",
         "organizations:ListOrganizationalUnitsForParent",
+        "organizations:ListPoliciesForTarget",
+        "organizations:ListParents",
         "organizations:ListRoots",
         "organizations:ListTagsForResource",
         "organizations:MoveAccount",
+        "organizations:EnableAWSServiceAccess",
+        "organizations:DisableAWSServiceAccess",
+        "organizations:EnablePolicyType",
+        "organizations:DisablePolicyType",
         "organizations:TagResource",
-        "organizations:UntagResource"
+        "organizations:UntagResource",
+        "organizations:UpdateOrganizationalUnit"
       ],
       "Resource": "*"
     },
@@ -44,14 +55,15 @@
       "Action": [
         "cloudtrail:CreateTrail",
         "cloudtrail:DeleteTrail",
+        "cloudtrail:AddTags",
         "cloudtrail:DescribeTrails",
         "cloudtrail:GetEventSelectors",
         "cloudtrail:GetTrailStatus",
+        "cloudtrail:ListTags",
         "cloudtrail:PutEventSelectors",
+        "cloudtrail:RemoveTags",
         "cloudtrail:StartLogging",
         "cloudtrail:StopLogging",
-        "cloudtrail:TagResource",
-        "cloudtrail:UntagResource",
         "cloudtrail:UpdateTrail"
       ],
       "Resource": "*"
