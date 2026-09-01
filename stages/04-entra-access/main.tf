@@ -9,7 +9,7 @@ resource "azuread_group" "secrets_manager_admin_read_only" {
   security_enabled        = true
   mail_enabled            = false
   mail_nickname           = local.group_mail_nickname
-  owners                  = var.owner_object_ids
+  owners                  = length(var.owner_object_ids) > 0 ? var.owner_object_ids : [data.azuread_client_config.current.object_id]
   prevent_duplicate_names = true
 
   lifecycle {
@@ -23,7 +23,7 @@ resource "azuread_group" "production_administrators" {
   security_enabled        = true
   mail_enabled            = false
   mail_nickname           = var.administrator_group_mail_nickname
-  owners                  = var.owner_object_ids
+  owners                  = length(var.owner_object_ids) > 0 ? var.owner_object_ids : [data.azuread_client_config.current.object_id]
   prevent_duplicate_names = true
 
   lifecycle {
