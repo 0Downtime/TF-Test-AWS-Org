@@ -6,6 +6,17 @@ stages 04–05 as explicitly enabled, approval-gated paths. Stage 00 is not part
 of the pipeline because it creates the remote state bucket used by the other
 stages.
 
+For reproducible setup of the AWS OIDC role, Azure DevOps service connection,
+pipeline, environments, and secure-file upload, use the
+[pipeline replication guide](azure-devops-pipeline-replication.md) and its
+[`setup-pipeline.sh`](../scripts/azuredevops/setup-pipeline.sh) helper.
+
+For a non-production stage-05 bootstrap or test, use
+[`azure-pipelines-stage05-test.yml`](../azure-pipelines-stage05-test.yml). It
+validates and plans only stage 05, so it does not require the secure files for
+stages 01–04 and it has no apply job. Use the maintained staged workflow for
+production changes.
+
 ## Azure DevOps prerequisites
 
 Install or enable these Azure DevOps tasks/extensions in the project:
