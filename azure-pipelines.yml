@@ -239,7 +239,7 @@ stages:
       aws_service_connection: ${{ parameters.aws_service_connection }}
       aws_region: ${{ parameters.aws_region }}
 
-${{ if eq(parameters.enable_entra_access, true) }}:
+- ${{ if eq(parameters.enable_entra_access, true) }}:
   - stage: MainPlan04
     displayName: Plan optional stage 04 Entra access
     dependsOn: MainApply03
@@ -275,7 +275,7 @@ ${{ if eq(parameters.enable_entra_access, true) }}:
         use_azure_cli: true
         azure_service_connection: ${{ parameters.azure_service_connection }}
 
-${{ if and(eq(parameters.enable_gitlab_oidc, true), eq(parameters.enable_entra_access, true)) }}:
+- ${{ if and(eq(parameters.enable_gitlab_oidc, true), eq(parameters.enable_entra_access, true)) }}:
   - stage: MainPlan05
     displayName: Plan optional stage 05 GitLab OIDC
     dependsOn:
@@ -294,7 +294,7 @@ ${{ if and(eq(parameters.enable_gitlab_oidc, true), eq(parameters.enable_entra_a
         aws_region: ${{ parameters.aws_region }}
         publish_artifact: true
 
-${{ if and(eq(parameters.enable_gitlab_oidc, true), eq(parameters.enable_entra_access, false)) }}:
+- ${{ if and(eq(parameters.enable_gitlab_oidc, true), eq(parameters.enable_entra_access, false)) }}:
   - stage: MainPlan05
     displayName: Plan optional stage 05 GitLab OIDC
     dependsOn: MainApply03
@@ -311,7 +311,7 @@ ${{ if and(eq(parameters.enable_gitlab_oidc, true), eq(parameters.enable_entra_a
         aws_region: ${{ parameters.aws_region }}
         publish_artifact: true
 
-${{ if eq(parameters.enable_gitlab_oidc, true) }}:
+- ${{ if eq(parameters.enable_gitlab_oidc, true) }}:
   - stage: MainApply05
     displayName: Apply optional stage 05 GitLab OIDC
     dependsOn: MainPlan05
