@@ -10,6 +10,7 @@ trigger:
     - pipelines/**
     - stages/**
     - scripts/ci/**
+    - scripts/azuredevops/**
     - docs/**
     - README.md
 
@@ -23,6 +24,7 @@ pr:
     - pipelines/**
     - stages/**
     - scripts/ci/**
+    - scripts/azuredevops/**
     - docs/**
     - README.md
 
@@ -71,6 +73,8 @@ stages:
         for stage in 01-organization 02-governance 03-production 04-entra-access 05-gitlab-oidc; do
           bash "$BUILD_SOURCESDIRECTORY/scripts/ci/terraform-stage.sh" validate "$stage"
         done
+        bash "$BUILD_SOURCESDIRECTORY/scripts/azuredevops/setup-pipeline.sh" verify \
+          --config "$BUILD_SOURCESDIRECTORY/scripts/azuredevops/azure-devops-pipeline.example.env"
       displayName: Terraform formatting and validation
       env:
         AWS_PROFILE: ''
