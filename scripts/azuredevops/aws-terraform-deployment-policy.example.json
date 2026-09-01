@@ -1,0 +1,100 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "TerraformStateBucket",
+      "Effect": "Allow",
+      "Action": [
+        "s3:GetBucketLocation",
+        "s3:GetBucketVersioning",
+        "s3:ListBucket",
+        "s3:GetObject",
+        "s3:PutObject",
+        "s3:DeleteObject"
+      ],
+      "Resource": [
+        "arn:aws:s3:::REPLACE_TERRAFORM_STATE_BUCKET",
+        "arn:aws:s3:::REPLACE_TERRAFORM_STATE_BUCKET/*"
+      ]
+    },
+    {
+      "Sid": "OrganizationStage",
+      "Effect": "Allow",
+      "Action": [
+        "organizations:CreateAccount",
+        "organizations:CreateOrganization",
+        "organizations:CreateOrganizationalUnit",
+        "organizations:DescribeAccount",
+        "organizations:DescribeCreateAccountStatus",
+        "organizations:DescribeOrganizationalUnit",
+        "organizations:DescribeOrganization",
+        "organizations:ListAccounts",
+        "organizations:ListOrganizationalUnitsForParent",
+        "organizations:ListRoots",
+        "organizations:ListTagsForResource",
+        "organizations:MoveAccount",
+        "organizations:TagResource",
+        "organizations:UntagResource"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "GovernanceCloudTrail",
+      "Effect": "Allow",
+      "Action": [
+        "cloudtrail:CreateTrail",
+        "cloudtrail:DeleteTrail",
+        "cloudtrail:DescribeTrails",
+        "cloudtrail:GetEventSelectors",
+        "cloudtrail:GetTrailStatus",
+        "cloudtrail:PutEventSelectors",
+        "cloudtrail:StartLogging",
+        "cloudtrail:StopLogging",
+        "cloudtrail:TagResource",
+        "cloudtrail:UntagResource",
+        "cloudtrail:UpdateTrail"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "GovernanceIdentityCenter",
+      "Effect": "Allow",
+      "Action": [
+        "sso:AttachManagedPolicyToPermissionSet",
+        "sso:CreateAccountAssignment",
+        "sso:CreatePermissionSet",
+        "sso:DeleteAccountAssignment",
+        "sso:DeleteInlinePolicyFromPermissionSet",
+        "sso:DeletePermissionSet",
+        "sso:DescribeAccountAssignmentCreationStatus",
+        "sso:DescribeAccountAssignmentDeletionStatus",
+        "sso:DescribePermissionSet",
+        "sso:DescribePermissionSetProvisioningStatus",
+        "sso:DetachManagedPolicyFromPermissionSet",
+        "sso:GetInlinePolicyForPermissionSet",
+        "sso:ListAccountAssignments",
+        "sso:ListAccountsForProvisionedPermissionSet",
+        "sso:ListInstances",
+        "sso:ListManagedPoliciesInPermissionSet",
+        "sso:ListPermissionSets",
+        "sso:ListPermissionSetsProvisionedToAccount",
+        "sso:ListTagsForResource",
+        "sso:ProvisionPermissionSet",
+        "sso:PutInlinePolicyToPermissionSet",
+        "sso:TagResource",
+        "sso:UntagResource",
+        "sso:UpdatePermissionSet"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "MemberAccountRoleAssumption",
+      "Effect": "Allow",
+      "Action": "sts:AssumeRole",
+      "Resource": [
+        "arn:aws:iam::REPLACE_LOG_ARCHIVE_ACCOUNT_ID:role/OrganizationAccountAccessRole",
+        "arn:aws:iam::REPLACE_PRODUCTION_ACCOUNT_ID:role/OrganizationAccountAccessRole"
+      ]
+    }
+  ]
+}
