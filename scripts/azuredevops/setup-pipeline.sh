@@ -258,7 +258,7 @@ apply_azure() {
       --resource environments \
       --route-parameters "project=$project_id" \
       --http-method GET \
-      --api-version 7.1-preview.1)"
+      --api-version 7.1)"
     environment_id="$(jq -r --arg name "$environment_name" '.value[]? | select(.name == $name) | .id' <<<"$environment_list" | head -n 1)"
     if [[ -n "$environment_id" && "$environment_id" != "null" ]]; then
       echo "Environment already exists: $environment_name"
@@ -274,7 +274,7 @@ apply_azure() {
       --resource environments \
       --route-parameters "project=$project_id" \
       --http-method POST \
-      --api-version 7.1-preview.1 \
+      --api-version 7.1 \
       --in-file "$environment_body" >/dev/null
     echo "Created environment: $environment_name"
   }
