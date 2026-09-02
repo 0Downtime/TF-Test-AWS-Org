@@ -80,7 +80,9 @@ case "$mode" in
     plan_status=$?
     set -e
 
-    if [[ "$plan_status" -gt 2 ]]; then
+    # With -detailed-exitcode, 0 means no changes and 2 means changes.
+    # Exit code 1 is a planning error and must never produce an apply artifact.
+    if [[ "$plan_status" -ne 0 && "$plan_status" -ne 2 ]]; then
       exit "$plan_status"
     fi
 

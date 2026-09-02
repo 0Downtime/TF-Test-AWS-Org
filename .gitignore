@@ -2,9 +2,12 @@
 .DS_Store
 *.tfstate
 *.tfstate.*
+*.tfvars
+*.tfvars.json
 *.tfplan
-backend.hcl
-terraform.tfvars
+*.hcl
+!*.hcl.example
+!.terraform.lock.hcl
 crash.log
 *.local.json
 *.xml

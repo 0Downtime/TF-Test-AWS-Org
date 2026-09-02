@@ -60,6 +60,12 @@ variable "secrets_manager_permission_set_name" {
   default     = "SecretsManagerAdminReadOnly"
 }
 
+variable "secrets_manager_crud_permission_set_name" {
+  description = "Permission set granting core Secrets Manager CRUD operations without wildcard Secrets Manager permissions."
+  type        = string
+  default     = "SecretsManagerReadWrite"
+}
+
 variable "secrets_manager_read_managed_policy_arns" {
   description = "AWS managed policies providing read-only access outside Secrets Manager."
   type        = set(string)
@@ -103,8 +109,8 @@ variable "sso_group_assignments" {
 
   validation {
     condition = alltrue([
-      for assignment in values(var.sso_group_assignments) : contains(["SecurityAudit", "BillingReadOnly", var.secrets_manager_permission_set_name, "AdministratorAccess"], assignment.permission_set)
+      for assignment in values(var.sso_group_assignments) : contains(["SecurityAudit", "BillingReadOnly", var.secrets_manager_permission_set_name, var.secrets_manager_crud_permission_set_name, "AdministratorAccess"], assignment.permission_set)
     ])
-    error_message = "sso_group_assignments.permission_set must be SecurityAudit, BillingReadOnly, the configured secrets-manager permission set, or AdministratorAccess."
+    error_message = "sso_group_assignments.permission_set must be SecurityAudit, BillingReadOnly, one of the configured secrets-manager permission sets, or AdministratorAccess."
   }
 }
