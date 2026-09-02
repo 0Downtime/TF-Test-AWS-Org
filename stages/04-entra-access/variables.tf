@@ -10,15 +10,23 @@ variable "use_azure_cli" {
 }
 
 variable "group_name_prefix" {
-  description = "Configurable prefix for the Entra access group name."
+  description = "Environment-specific prefix for Terraform-managed Entra access groups. Supply this in the ignored environment tfvars file."
   type        = string
-  default     = "REPLACE_WITH_ENVIRONMENT_GROUP_PREFIX"
+
+  validation {
+    condition     = trimspace(var.group_name_prefix) != ""
+    error_message = "group_name_prefix must be supplied in the environment configuration."
+  }
 }
 
 variable "group_name_suffix" {
-  description = "Suffix for the Entra access group name."
+  description = "Purpose suffix for the Secrets Manager access group. Supply this in the ignored environment tfvars file."
   type        = string
-  default     = "SecretsManagerAdminReadOnly"
+
+  validation {
+    condition     = trimspace(var.group_name_suffix) != ""
+    error_message = "group_name_suffix must be supplied in the environment configuration."
+  }
 }
 
 variable "group_display_name" {
@@ -40,15 +48,23 @@ variable "group_description" {
 }
 
 variable "administrator_group_display_name" {
-  description = "Display name for the production administrator Entra security group."
+  description = "Display name for the administrator Entra security group. Supply this in the ignored environment tfvars file."
   type        = string
-  default     = "AWS-Production-Administrators"
+
+  validation {
+    condition     = trimspace(var.administrator_group_display_name) != ""
+    error_message = "administrator_group_display_name must be supplied in the environment configuration."
+  }
 }
 
 variable "administrator_group_mail_nickname" {
-  description = "Mail nickname for the production administrator Entra security group."
+  description = "Mail nickname for the administrator Entra security group. Supply this in the ignored environment tfvars file."
   type        = string
-  default     = "aws-production-administrators"
+
+  validation {
+    condition     = trimspace(var.administrator_group_mail_nickname) != ""
+    error_message = "administrator_group_mail_nickname must be supplied in the environment configuration."
+  }
 }
 
 variable "administrator_group_description" {
