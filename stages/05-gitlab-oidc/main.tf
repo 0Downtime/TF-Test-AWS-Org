@@ -25,6 +25,7 @@ resource "aws_s3_bucket_versioning" "oidc_metadata" {
   }
 }
 
+#trivy:ignore:AVD-AWS-0132:exp:2027-09-02
 resource "aws_s3_bucket_server_side_encryption_configuration" "oidc_metadata" {
   bucket = aws_s3_bucket.oidc_metadata.id
 

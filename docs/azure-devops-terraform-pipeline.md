@@ -6,6 +6,28 @@ stages 04–05 as explicitly enabled, approval-gated paths. Stage 00 is not part
 of the pipeline because it creates the remote state bucket used by the other
 stages.
 
+Every validation and deployment run first executes a security gate. The gate
+uses pinned Gitleaks and Trivy container images to scan the repository for
+committed secrets and the bootstrapped state bucket plus each enabled Terraform
+stage for HIGH or CRITICAL misconfigurations. Either a secret finding or an IaC
+finding blocks every plan and apply. SARIF reports are published as the
+`security-scan-reports` pipeline artifact, including when the gate fails.
+
+Run the same gate locally from a checkout with Docker available:
+
+```bash
+mkdir -p .security-scan
+bash scripts/ci/security-scan.sh "$PWD" "$PWD/.security-scan" stages
+```
+
+Do not add blanket Trivy or Gitleaks ignores to make a run green. If a finding
+is accepted after security review, record the narrowly scoped rationale and
+expiry in the change that introduces the exception. The repository records the
+customer-approved SSE-S3 choice with expiring inline exceptions for the
+customer-managed-KMS checks; no customer-managed keys are created. The
+CloudFront WAF finding remains a blocker when stage 05 is enabled and must be
+remediated or explicitly approved before that deployment.
+
 For reproducible setup of the AWS OIDC role, Azure DevOps service connection,
 pipeline, environments, and secure-file upload, use the
 [pipeline replication guide](azure-devops-pipeline-replication.md) and its
