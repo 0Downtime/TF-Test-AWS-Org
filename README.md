@@ -19,6 +19,8 @@ The federation scripts configure Entra SAML, SCIM provisioning, managed AWS CLI 
 
 The private GitLab OIDC mirror, synchronization script, two-phase bootstrap, and protected-ref acceptance checks are documented in the [private GitLab OIDC runbook](docs/gitlab-private-oidc-runbook.md).
 
+The Azure DevOps deployment workflow is defined in [`azure-pipelines.yml`](azure-pipelines.yml). It uses temporary AWS OIDC credentials, secure files for ignored Terraform inputs, sequential saved-plan applies, and protected deployment environments. See the [Azure DevOps Terraform pipeline setup guide](docs/azure-devops-terraform-pipeline.md) before enabling it.
+
 Terraform configuration lives under `stages/`, with independent state and deployment boundaries per stage. Run Terraform from a stage directory, not from the repository root.
 The Azure DevOps deployment workflow is defined in [`azure-pipelines.yml`](azure-pipelines.yml). It uses temporary AWS OIDC credentials, secure files for ignored Terraform inputs, sequential saved-plan applies, and protected deployment environments. See the [Azure DevOps Terraform pipeline setup guide](docs/azure-devops-terraform-pipeline.md) before enabling it.
 
@@ -37,6 +39,8 @@ The root-level Terraform files are the original monolithic configuration and are
 - Azure CLI logged in to the target tenant if stage 04 is used with its default `use_azure_cli = true`.
 
 Do not commit `terraform.tfvars`, `backend.hcl`, local federation/adoption JSON, generated plan files, metadata XML, SCIM tokens, private keys, or DPAPI-protected files. Terraform state can contain sensitive infrastructure metadata; protect the state bucket and its access accordingly.
+
+The repository ignores host-local `*.tfvars`, `*.tfvars.json`, `*.hcl`, and `*.tfplan` files while keeping `*.hcl.example` templates and `.terraform.lock.hcl` files tracked. For the strongest protection when changing branches or working on multiple clones, keep the real variable and backend files outside the Git working tree and pass their paths with `-var-file` and `-backend-config`.
 
 ## Deployment order
 
@@ -116,7 +120,7 @@ terraform -chdir=stages/02-governance apply tfplan
 terraform -chdir=stages/02-governance output
 ```
 
-Before applying, enable IAM Identity Center in the intended `identity_center_region`. Review the CloudTrail destination policy, account IDs, permission-set policies, and any configured group assignments. The `SecretsManagerAdminReadOnly` permission set combines AWS `ReadOnlyAccess` with an inline `secretsmanager:*` allow, while `AdministratorAccess` is full account administration; both require explicit approval.
+Before applying, enable IAM Identity Center in the intended `identity_center_region`. Review the CloudTrail destination policy, account IDs, permission-set policies, and any configured group assignments. The `SecretsManagerAdminReadOnly` permission set combines AWS `ReadOnlyAccess` with an inline `secretsmanager:*` allow. The separate `SecretsManagerReadWrite` permission set grants only core Secrets Manager list/read/create/update/delete/restore/tag operations and is the preferred routine path when those actions are sufficient. `AdministratorAccess` is full account administration; all three require explicit approval.
 
 ### 4. Apply the production baseline
 
@@ -130,7 +134,7 @@ terraform -chdir=stages/03-production apply tfplan
 terraform -chdir=stages/03-production output
 ```
 
-Stage 03 creates a secret container but never stores a secret value. The optional `production_trusted_principal_arns` input creates a role with access only to that baseline secret; leave it empty until a real workload or administration principal exists.
+Stage 03 creates a secret container but never stores a secret value. The optional `production_trusted_principal_arns` input creates a role with the `SecretsManagerRead` policy attached, plus separate `SecretsManagerRead` and `SecretsManagerReadWrite` policy ARNs. Attach the read/write policy only to an explicitly approved principal that needs to update the baseline secret; leave the input empty until a real workload or administration principal exists.
 
 ### 5. Optional Entra access and federation
 

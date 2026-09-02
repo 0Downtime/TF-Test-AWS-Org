@@ -92,7 +92,7 @@ Set these values for the target environment:
 - entra.tenantId, entra.clientId, and entra.certificateThumbprint.
 - entra.applicationDisplayName, normally AWS IAM Identity Center.
 - entra.applicationTemplateId, if the current AWS gallery template ID is known.
-- accessMappings: unique Entra group names, Terraform permission-set names, and explicit account IDs or all-active-accounts. Supported permission sets include `SecurityAudit`, `BillingReadOnly`, `SecretsManagerAdminReadOnly`, and `AdministratorAccess`.
+- accessMappings: unique Entra group names, Terraform permission-set names, and explicit account IDs or all-active-accounts. Supported permission sets include `SecurityAudit`, `BillingReadOnly`, `SecretsManagerAdminReadOnly`, `SecretsManagerReadWrite`, and `AdministratorAccess`.
 
 Do not put a SCIM token, private key, Graph secret, or password in this JSON file.
 

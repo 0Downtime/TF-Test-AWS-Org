@@ -81,8 +81,8 @@ function Read-FederationConfig {
         if ($accountIds.Count -eq 0) {
             throw "Access mapping '$mappingName' must contain at least one accountIds entry."
         }
-        if ($permissionSet -notin @('SecurityAudit', 'BillingReadOnly', 'SecretsManagerAdminReadOnly', 'AdministratorAccess')) {
-            throw "Access mapping '$mappingName' uses unsupported permission set '$permissionSet'. Supported values are SecurityAudit, BillingReadOnly, SecretsManagerAdminReadOnly, and AdministratorAccess."
+        if ($permissionSet -notin @('SecurityAudit', 'BillingReadOnly', 'SecretsManagerAdminReadOnly', 'SecretsManagerReadWrite', 'AdministratorAccess')) {
+            throw "Access mapping '$mappingName' uses unsupported permission set '$permissionSet'. Supported values are SecurityAudit, BillingReadOnly, SecretsManagerAdminReadOnly, SecretsManagerReadWrite, and AdministratorAccess."
         }
 
         $normalizedMappings.Add([pscustomobject]@{
