@@ -84,9 +84,54 @@ stages:
         AWS_SECRET_ACCESS_KEY: ci-validation
         AWS_SESSION_TOKEN: ci-validation
 
+- stage: Security
+  displayName: Scan repository for secrets and Terraform misconfigurations
+  dependsOn: Validate
+  condition: succeeded()
+  jobs:
+  - job: SecurityScan
+    displayName: Gitleaks and Trivy
+    pool:
+      vmImage: ubuntu-latest
+    steps:
+    - checkout: self
+      # Gitleaks scans the complete repository history available to the agent.
+      fetchDepth: 0
+
+    - bash: |
+        set -euo pipefail
+        output_dir="$BUILD_ARTIFACTSTAGINGDIRECTORY/security"
+        mkdir -p "$output_dir"
+        scan_targets=(
+          stages/00-state-bucket
+          stages/01-organization
+          stages/02-governance
+          stages/03-production
+        )
+        if [[ '${{ parameters.enable_entra_access }}' == 'True' ]]; then
+          scan_targets+=(stages/04-entra-access)
+        fi
+        if [[ '${{ parameters.enable_gitlab_oidc }}' == 'True' ]]; then
+          scan_targets+=(stages/05-gitlab-oidc)
+        fi
+        bash "$BUILD_SOURCESDIRECTORY/scripts/ci/security-scan.sh" \
+          "$BUILD_SOURCESDIRECTORY" \
+          "$output_dir" \
+          "${scan_targets[@]}"
+      displayName: Run secret and IaC security scans
+
+    # Publish evidence even when the gate fails, so reviewers can download the
+    # exact SARIF reports that caused the block.
+    - task: PublishPipelineArtifact@1
+      displayName: Publish security scan reports
+      condition: always()
+      inputs:
+        targetPath: '$(Build.ArtifactStagingDirectory)/security'
+        artifact: security-scan-reports
+
 - stage: PullRequestPlan
   displayName: Plan pull request changes
-  dependsOn: Validate
+  dependsOn: Security
   condition: and(succeeded(), eq(variables['Build.Reason'], 'PullRequest'))
   jobs:
   - template: pipelines/terraform-plan-job.yml
@@ -148,7 +193,7 @@ stages:
 # their predecessor stage has been approved and applied.
 - stage: MainPlan01
   displayName: Plan stage 01 organization
-  dependsOn: Validate
+  dependsOn: Security
   condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
   jobs:
   - template: pipelines/terraform-plan-job.yml

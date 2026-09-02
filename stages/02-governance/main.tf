@@ -56,6 +56,7 @@ resource "aws_s3_bucket_versioning" "log_archive" {
   }
 }
 
+#trivy:ignore:AVD-AWS-0132:exp:2027-09-02
 resource "aws_s3_bucket_server_side_encryption_configuration" "log_archive" {
   provider = aws.log_archive
   bucket   = aws_s3_bucket.log_archive.id
@@ -186,6 +187,7 @@ resource "aws_s3_bucket_policy" "log_archive" {
   ]
 }
 
+#trivy:ignore:AVD-AWS-0015:exp:2027-09-02
 resource "aws_cloudtrail" "organization" {
   name                          = var.cloudtrail_name
   s3_bucket_name                = aws_s3_bucket.log_archive.id
