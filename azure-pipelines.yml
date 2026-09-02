@@ -10,6 +10,7 @@ trigger:
     - pipelines/**
     - stages/**
     - scripts/ci/**
+    - scripts/azuredevops/**
     - docs/**
     - README.md
 
@@ -23,6 +24,7 @@ pr:
     - pipelines/**
     - stages/**
     - scripts/ci/**
+    - scripts/azuredevops/**
     - docs/**
     - README.md
 
@@ -71,6 +73,8 @@ stages:
         for stage in 01-organization 02-governance 03-production 04-entra-access 05-gitlab-oidc; do
           bash "$BUILD_SOURCESDIRECTORY/scripts/ci/terraform-stage.sh" validate "$stage"
         done
+        bash "$BUILD_SOURCESDIRECTORY/scripts/azuredevops/setup-pipeline.sh" verify \
+          --config "$BUILD_SOURCESDIRECTORY/scripts/azuredevops/azure-devops-pipeline.example.env"
       displayName: Terraform formatting and validation
       env:
         AWS_PROFILE: ''
@@ -115,29 +119,29 @@ stages:
       aws_service_connection: ${{ parameters.aws_service_connection }}
       aws_region: ${{ parameters.aws_region }}
 
-  - template: pipelines/terraform-plan-job.yml
-    parameters:
-      job_name: Plan04EntraAccess
-      display_name: Plan optional stage 04 Entra access
-      stage_name: 04-entra-access
-      backend_secure_file: aws-terraform-04-entra-access.backend.hcl
-      tfvars_secure_file: aws-terraform-04-entra-access.tfvars
-      aws_service_connection: ${{ parameters.aws_service_connection }}
-      aws_region: ${{ parameters.aws_region }}
-      use_azure_cli: true
-      azure_service_connection: ${{ parameters.azure_service_connection }}
-      condition: and(succeeded(), eq('${{ parameters.enable_entra_access }}', 'true'))
+  - ${{ if eq(parameters.enable_entra_access, true) }}:
+    - template: pipelines/terraform-plan-job.yml
+      parameters:
+        job_name: Plan04EntraAccess
+        display_name: Plan optional stage 04 Entra access
+        stage_name: 04-entra-access
+        backend_secure_file: aws-terraform-04-entra-access.backend.hcl
+        tfvars_secure_file: aws-terraform-04-entra-access.tfvars
+        aws_service_connection: ${{ parameters.aws_service_connection }}
+        aws_region: ${{ parameters.aws_region }}
+        use_azure_cli: true
+        azure_service_connection: ${{ parameters.azure_service_connection }}
 
-  - template: pipelines/terraform-plan-job.yml
-    parameters:
-      job_name: Plan05GitLabOidc
-      display_name: Plan optional stage 05 GitLab OIDC
-      stage_name: 05-gitlab-oidc
-      backend_secure_file: aws-terraform-05-gitlab-oidc.backend.hcl
-      tfvars_secure_file: aws-terraform-05-gitlab-oidc.tfvars
-      aws_service_connection: ${{ parameters.aws_service_connection }}
-      aws_region: ${{ parameters.aws_region }}
-      condition: and(succeeded(), eq('${{ parameters.enable_gitlab_oidc }}', 'true'))
+  - ${{ if eq(parameters.enable_gitlab_oidc, true) }}:
+    - template: pipelines/terraform-plan-job.yml
+      parameters:
+        job_name: Plan05GitLabOidc
+        display_name: Plan optional stage 05 GitLab OIDC
+        stage_name: 05-gitlab-oidc
+        backend_secure_file: aws-terraform-05-gitlab-oidc.backend.hcl
+        tfvars_secure_file: aws-terraform-05-gitlab-oidc.tfvars
+        aws_service_connection: ${{ parameters.aws_service_connection }}
+        aws_region: ${{ parameters.aws_region }}
 
 # Main deployments plan and apply one stage at a time. This keeps plans that
 # depend on newly-created organization accounts from becoming stale before
@@ -235,70 +239,90 @@ stages:
       aws_service_connection: ${{ parameters.aws_service_connection }}
       aws_region: ${{ parameters.aws_region }}
 
-- stage: MainPlan04
-  displayName: Plan optional stage 04 Entra access
-  dependsOn: MainApply03
-  condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'), eq('${{ parameters.enable_entra_access }}', 'true'))
-  jobs:
-  - template: pipelines/terraform-plan-job.yml
-    parameters:
-      job_name: MainPlan04EntraAccess
-      display_name: Plan stage 04 Entra access for main
-      stage_name: 04-entra-access
-      backend_secure_file: aws-terraform-04-entra-access.backend.hcl
-      tfvars_secure_file: aws-terraform-04-entra-access.tfvars
-      aws_service_connection: ${{ parameters.aws_service_connection }}
-      aws_region: ${{ parameters.aws_region }}
-      use_azure_cli: true
-      azure_service_connection: ${{ parameters.azure_service_connection }}
-      publish_artifact: true
+- ${{ if eq(parameters.enable_entra_access, true) }}:
+  - stage: MainPlan04
+    displayName: Plan optional stage 04 Entra access
+    dependsOn: MainApply03
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+    jobs:
+    - template: pipelines/terraform-plan-job.yml
+      parameters:
+        job_name: MainPlan04EntraAccess
+        display_name: Plan stage 04 Entra access for main
+        stage_name: 04-entra-access
+        backend_secure_file: aws-terraform-04-entra-access.backend.hcl
+        tfvars_secure_file: aws-terraform-04-entra-access.tfvars
+        aws_service_connection: ${{ parameters.aws_service_connection }}
+        aws_region: ${{ parameters.aws_region }}
+        use_azure_cli: true
+        azure_service_connection: ${{ parameters.azure_service_connection }}
+        publish_artifact: true
 
-- stage: MainApply04
-  displayName: Apply optional stage 04 Entra access
-  dependsOn: MainPlan04
-  condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'), eq('${{ parameters.enable_entra_access }}', 'true'))
-  jobs:
-  - template: pipelines/terraform-apply-job.yml
-    parameters:
-      job_name: MainApply04EntraAccess
-      display_name: Apply approved stage 04 Entra access plan
-      stage_name: 04-entra-access
-      environment_name: entra-access
-      backend_secure_file: aws-terraform-04-entra-access.backend.hcl
-      aws_service_connection: ${{ parameters.aws_service_connection }}
-      aws_region: ${{ parameters.aws_region }}
-      use_azure_cli: true
-      azure_service_connection: ${{ parameters.azure_service_connection }}
+  - stage: MainApply04
+    displayName: Apply optional stage 04 Entra access
+    dependsOn: MainPlan04
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+    jobs:
+    - template: pipelines/terraform-apply-job.yml
+      parameters:
+        job_name: MainApply04EntraAccess
+        display_name: Apply approved stage 04 Entra access plan
+        stage_name: 04-entra-access
+        environment_name: entra-access
+        backend_secure_file: aws-terraform-04-entra-access.backend.hcl
+        aws_service_connection: ${{ parameters.aws_service_connection }}
+        aws_region: ${{ parameters.aws_region }}
+        use_azure_cli: true
+        azure_service_connection: ${{ parameters.azure_service_connection }}
 
-- stage: MainPlan05
-  displayName: Plan optional stage 05 GitLab OIDC
-  dependsOn:
-  - MainApply03
-  - MainApply04
-  condition: and(eq(variables['Build.SourceBranch'], 'refs/heads/main'), eq('${{ parameters.enable_gitlab_oidc }}', 'true'), in(dependencies.MainApply03.result, 'Succeeded'), in(dependencies.MainApply04.result, 'Succeeded', 'Skipped'))
-  jobs:
-  - template: pipelines/terraform-plan-job.yml
-    parameters:
-      job_name: MainPlan05GitLabOidc
-      display_name: Plan stage 05 GitLab OIDC for main
-      stage_name: 05-gitlab-oidc
-      backend_secure_file: aws-terraform-05-gitlab-oidc.backend.hcl
-      tfvars_secure_file: aws-terraform-05-gitlab-oidc.tfvars
-      aws_service_connection: ${{ parameters.aws_service_connection }}
-      aws_region: ${{ parameters.aws_region }}
-      publish_artifact: true
+- ${{ if and(eq(parameters.enable_gitlab_oidc, true), eq(parameters.enable_entra_access, true)) }}:
+  - stage: MainPlan05
+    displayName: Plan optional stage 05 GitLab OIDC
+    dependsOn:
+    - MainApply03
+    - MainApply04
+    condition: and(eq(variables['Build.SourceBranch'], 'refs/heads/main'), in(dependencies.MainApply03.result, 'Succeeded'), in(dependencies.MainApply04.result, 'Succeeded'))
+    jobs:
+    - template: pipelines/terraform-plan-job.yml
+      parameters:
+        job_name: MainPlan05GitLabOidc
+        display_name: Plan stage 05 GitLab OIDC for main
+        stage_name: 05-gitlab-oidc
+        backend_secure_file: aws-terraform-05-gitlab-oidc.backend.hcl
+        tfvars_secure_file: aws-terraform-05-gitlab-oidc.tfvars
+        aws_service_connection: ${{ parameters.aws_service_connection }}
+        aws_region: ${{ parameters.aws_region }}
+        publish_artifact: true
 
-- stage: MainApply05
-  displayName: Apply optional stage 05 GitLab OIDC
-  dependsOn: MainPlan05
-  condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'), eq('${{ parameters.enable_gitlab_oidc }}', 'true'))
-  jobs:
-  - template: pipelines/terraform-apply-job.yml
-    parameters:
-      job_name: MainApply05GitLabOidc
-      display_name: Apply approved stage 05 GitLab OIDC plan
-      stage_name: 05-gitlab-oidc
-      environment_name: gitlab-oidc
-      backend_secure_file: aws-terraform-05-gitlab-oidc.backend.hcl
-      aws_service_connection: ${{ parameters.aws_service_connection }}
-      aws_region: ${{ parameters.aws_region }}
+- ${{ if and(eq(parameters.enable_gitlab_oidc, true), eq(parameters.enable_entra_access, false)) }}:
+  - stage: MainPlan05
+    displayName: Plan optional stage 05 GitLab OIDC
+    dependsOn: MainApply03
+    condition: and(eq(variables['Build.SourceBranch'], 'refs/heads/main'), in(dependencies.MainApply03.result, 'Succeeded'))
+    jobs:
+    - template: pipelines/terraform-plan-job.yml
+      parameters:
+        job_name: MainPlan05GitLabOidc
+        display_name: Plan stage 05 GitLab OIDC for main
+        stage_name: 05-gitlab-oidc
+        backend_secure_file: aws-terraform-05-gitlab-oidc.backend.hcl
+        tfvars_secure_file: aws-terraform-05-gitlab-oidc.tfvars
+        aws_service_connection: ${{ parameters.aws_service_connection }}
+        aws_region: ${{ parameters.aws_region }}
+        publish_artifact: true
+
+- ${{ if eq(parameters.enable_gitlab_oidc, true) }}:
+  - stage: MainApply05
+    displayName: Apply optional stage 05 GitLab OIDC
+    dependsOn: MainPlan05
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+    jobs:
+    - template: pipelines/terraform-apply-job.yml
+      parameters:
+        job_name: MainApply05GitLabOidc
+        display_name: Apply approved stage 05 GitLab OIDC plan
+        stage_name: 05-gitlab-oidc
+        environment_name: gitlab-oidc
+        backend_secure_file: aws-terraform-05-gitlab-oidc.backend.hcl
+        aws_service_connection: ${{ parameters.aws_service_connection }}
+        aws_region: ${{ parameters.aws_region }}
