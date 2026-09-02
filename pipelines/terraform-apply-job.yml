@@ -1,0 +1,100 @@
+parameters:
+- name: job_name
+  type: string
+- name: display_name
+  type: string
+- name: stage_name
+  type: string
+- name: environment_name
+  type: string
+- name: backend_secure_file
+  type: string
+- name: aws_service_connection
+  type: string
+- name: aws_region
+  type: string
+- name: use_azure_cli
+  type: boolean
+  default: false
+- name: azure_service_connection
+  type: string
+  default: ''
+
+jobs:
+- deployment: ${{ parameters.job_name }}
+  displayName: ${{ parameters.display_name }}
+  environment: ${{ parameters.environment_name }}
+  pool:
+    vmImage: ubuntu-latest
+  strategy:
+    runOnce:
+      deploy:
+        steps:
+        - checkout: self
+
+        - task: TerraformInstaller@1
+          displayName: Install Terraform
+          inputs:
+            terraformVersion: '1.10.5'
+
+        - task: DownloadSecureFile@1
+          name: stageBackend
+          displayName: Download backend configuration
+          inputs:
+            secureFile: ${{ parameters.backend_secure_file }}
+
+        - download: current
+          artifact: 'tfplan-${{ parameters.stage_name }}'
+
+        - ${{ if eq(parameters.use_azure_cli, false) }}:
+          - task: AWSShellScript@1
+            displayName: Apply approved ${{ parameters.stage_name }} plan with AWS OIDC
+            inputs:
+              awsCredentials: ${{ parameters.aws_service_connection }}
+              regionName: ${{ parameters.aws_region }}
+              scriptType: inline
+              inlineScript: |
+                set -euo pipefail
+                aws sts get-caller-identity --output json
+                plan_dir="$PIPELINE_WORKSPACE/tfplan-${{ parameters.stage_name }}"
+                bash "$BUILD_SOURCESDIRECTORY/scripts/ci/terraform-stage.sh" apply \
+                  "${{ parameters.stage_name }}" \
+                  "$(stageBackend.secureFilePath)" \
+                  "$plan_dir/${{ parameters.stage_name }}.tfplan" \
+                  "$plan_dir/manifest.txt"
+
+        - ${{ if eq(parameters.use_azure_cli, true) }}:
+          - task: AWSShellScript@1
+            name: captureAws
+            displayName: Acquire temporary AWS credentials for Entra apply
+            inputs:
+              awsCredentials: ${{ parameters.aws_service_connection }}
+              regionName: ${{ parameters.aws_region }}
+              scriptType: inline
+              inlineScript: |
+                set -euo pipefail
+                aws sts get-caller-identity --output json
+                echo "##vso[task.setvariable variable=awsAccessKeyId;isSecret=true]$AWS_ACCESS_KEY_ID"
+                echo "##vso[task.setvariable variable=awsSecretAccessKey;isSecret=true]$AWS_SECRET_ACCESS_KEY"
+                echo "##vso[task.setvariable variable=awsSessionToken;isSecret=true]$AWS_SESSION_TOKEN"
+
+          - task: AzureCLI@2
+            displayName: Apply approved ${{ parameters.stage_name }} plan with Azure WIF and AWS OIDC
+            inputs:
+              azureSubscription: ${{ parameters.azure_service_connection }}
+              scriptType: bash
+              scriptLocation: inlineScript
+              inlineScript: |
+                set -euo pipefail
+                az account show --output json
+                aws sts get-caller-identity --output json
+                plan_dir="$PIPELINE_WORKSPACE/tfplan-${{ parameters.stage_name }}"
+                bash "$BUILD_SOURCESDIRECTORY/scripts/ci/terraform-stage.sh" apply \
+                  "${{ parameters.stage_name }}" \
+                  "$(stageBackend.secureFilePath)" \
+                  "$plan_dir/${{ parameters.stage_name }}.tfplan" \
+                  "$plan_dir/manifest.txt"
+            env:
+              AWS_ACCESS_KEY_ID: $(awsAccessKeyId)
+              AWS_SECRET_ACCESS_KEY: $(awsSecretAccessKey)
+              AWS_SESSION_TOKEN: $(awsSessionToken)

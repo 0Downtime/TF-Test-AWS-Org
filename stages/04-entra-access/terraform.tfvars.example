@@ -1,0 +1,9 @@
+tenant_id          = "00000000-0000-0000-0000-000000000000"
+use_azure_cli      = true
+group_name_prefix  = "REPLACE_WITH_ENVIRONMENT_GROUP_PREFIX"
+group_name_suffix  = "SecretsManagerAdminReadOnly"
+
+# The stage also creates this separate, production-scoped administrator group.
+# Change the names only if they already exist in the tenant and will be imported.
+# administrator_group_display_name = "AWS-Production-Administrators"
+# administrator_group_mail_nickname = "aws-production-administrators"
