@@ -153,7 +153,7 @@ terraform apply entra-access.tfplan
 Pop-Location
 ```
 
-The groups are security-enabled, non-mail-enabled, and protected against Terraform destruction. Membership and SCIM provisioning remain separate operations. The administrator group is `AWS-Production-Administrators`; add only approved production administrators through your existing company access-control process. This repository does not configure PIM. If the existing Secrets Manager group already exists, import it before planning:
+The groups are security-enabled, non-mail-enabled, and protected against Terraform destruction. Their names are supplied through the ignored `terraform.tfvars` file so the environment prefix and naming conventions are not committed to this repository. Membership and SCIM provisioning remain separate operations. Add only approved production administrators through your existing company access-control process. This repository does not configure PIM. If either existing group already exists, import it before planning:
 
 ```powershell
 terraform -chdir=stages/04-entra-access import azuread_group.secrets_manager_admin_read_only /groups/<entra-group-object-id>

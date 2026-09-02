@@ -92,7 +92,7 @@ Set these values for the target environment:
 - entra.tenantId, entra.clientId, and entra.certificateThumbprint.
 - entra.applicationDisplayName, normally AWS IAM Identity Center.
 - entra.applicationTemplateId, if the current AWS gallery template ID is known.
-- accessMappings: unique Entra group names, Terraform permission-set names, and explicit account IDs or all-active-accounts. Supported permission sets include `SecurityAudit`, `BillingReadOnly`, `SecretsManagerAdminReadOnly`, `SecretsManagerReadWrite`, and `AdministratorAccess`.
+- entra.groupNamePrefix and accessMappings[].entraGroupSuffix: the environment-specific group prefix and purpose suffixes used to derive unique Entra group names. Explicit `entraGroup` values remain supported for local exceptions, but must only be stored in the ignored local configuration. Supported permission sets include `SecurityAudit`, `BillingReadOnly`, `SecretsManagerAdminReadOnly`, `SecretsManagerReadWrite`, and `AdministratorAccess`.
 
 Do not put a SCIM token, private key, Graph secret, or password in this JSON file.
 
@@ -251,7 +251,7 @@ aws sts get-caller-identity --profile <managed-profile>
 
 ### Production administrator group
 
-The same Entra stage creates `AWS-Production-Administrators`, a separate non-mail-enabled security group mapped to the AWS `AdministratorAccess` permission set. Set its membership through the company's existing access-control solution; this repository does not configure PIM. Target the mapping to the production account ID rather than `all-active-accounts` unless full administration across every active account is intended. Do not use this group for routine access when `SecurityAudit` or `SecretsManagerAdminReadOnly` is sufficient.
+The same Entra stage creates the configured administrator group, a separate non-mail-enabled security group mapped to the AWS `AdministratorAccess` permission set. Set its membership through the company's existing access-control solution; this repository does not configure PIM. Target the mapping to the production account ID rather than `all-active-accounts` unless full administration across every active account is intended. Do not use this group for routine access when `SecurityAudit` or `SecretsManagerAdminReadOnly` is sufficient.
 
 Replace the example mapping's `REPLACE_WITH_PRODUCTION_ACCOUNT_ID` value with the real production account ID in the ignored local federation configuration before running Apply.
 

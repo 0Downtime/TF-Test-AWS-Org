@@ -18,30 +18,31 @@
     "certificateThumbprint": "REPLACE_WITH_CERTIFICATE_THUMBPRINT",
     "applicationDisplayName": "AWS IAM Identity Center",
     "applicationTemplateId": "",
-    "identityProviderMetadataPath": "C:\\SecureBootstrap\\entra-idp-metadata.xml"
+    "identityProviderMetadataPath": "C:\\SecureBootstrap\\entra-idp-metadata.xml",
+    "groupNamePrefix": "REPLACE_WITH_ENVIRONMENT_GROUP_PREFIX"
   },
   "accessMappings": [
     {
       "name": "security-audit",
-      "entraGroup": "AWS-SecurityAudit",
+      "entraGroupSuffix": "SecurityAudit",
       "permissionSet": "SecurityAudit",
       "accountIds": ["all-active-accounts"]
     },
     {
       "name": "billing-read-only",
-      "entraGroup": "AWS-BillingReadOnly",
+      "entraGroupSuffix": "BillingReadOnly",
       "permissionSet": "BillingReadOnly",
       "accountIds": ["000000000000"]
     },
     {
       "name": "secrets-manager-admin-read-only",
-      "entraGroup": "REPLACE_WITH_ENVIRONMENT_GROUP_PREFIX-SecretsManagerAdminReadOnly",
+      "entraGroupSuffix": "SecretsManagerAdminReadOnly",
       "permissionSet": "SecretsManagerAdminReadOnly",
       "accountIds": ["all-active-accounts"]
     },
     {
       "name": "production-administrators",
-      "entraGroup": "AWS-Production-Administrators",
+      "entraGroupSuffix": "Production-Administrators",
       "permissionSet": "AdministratorAccess",
       "accountIds": ["REPLACE_WITH_PRODUCTION_ACCOUNT_ID"]
     }

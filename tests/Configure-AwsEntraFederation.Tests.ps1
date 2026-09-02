@@ -84,9 +84,12 @@ Describe 'Federation configuration examples' {
         $config.bootstrap.requiredAccountCount | Should -BeGreaterThan 0
         $config.bootstrap.requestedAccountQuota | Should -BeGreaterOrEqual $config.bootstrap.requiredAccountCount
         $config.entra | Should -Not -BeNullOrEmpty
+        $config.entra.groupNamePrefix | Should -Be 'REPLACE_WITH_ENVIRONMENT_GROUP_PREFIX'
         @($config.accessMappings).Count | Should -BeGreaterThan 0
         @($config.accessMappings | Where-Object permissionSet -eq 'AdministratorAccess').Count | Should -Be 1
-        @($config.accessMappings | Where-Object entraGroup -eq 'AWS-Production-Administrators').Count | Should -Be 1
+        @($config.accessMappings | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_.entraGroupSuffix) }).Count |
+            Should -Be @($config.accessMappings).Count
+        @($config.accessMappings | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_.entraGroup) }).Count | Should -Be 0
     }
 
     It 'does not include a SCIM token or private key' {
