@@ -5,5 +5,5 @@ group_name_suffix  = "SecretsManagerAdminReadOnly"
 
 # The stage also creates this separate, production-scoped administrator group.
 # Change the names only if they already exist in the tenant and will be imported.
-# administrator_group_display_name = "AWS-Production-Administrators"
-# administrator_group_mail_nickname = "aws-production-administrators"
+# administrator_group_display_name = "SRA-PROD-Production-Administrators"
+# administrator_group_mail_nickname = "sra-prod-production-administrators"

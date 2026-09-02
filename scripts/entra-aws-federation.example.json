@@ -23,13 +23,13 @@
   "accessMappings": [
     {
       "name": "security-audit",
-      "entraGroup": "AWS-SecurityAudit",
+      "entraGroup": "SRA-PROD-SecurityAudit",
       "permissionSet": "SecurityAudit",
       "accountIds": ["all-active-accounts"]
     },
     {
       "name": "billing-read-only",
-      "entraGroup": "AWS-BillingReadOnly",
+      "entraGroup": "SRA-PROD-BillingReadOnly",
       "permissionSet": "BillingReadOnly",
       "accountIds": ["000000000000"]
     },
@@ -41,7 +41,7 @@
     },
     {
       "name": "production-administrators",
-      "entraGroup": "AWS-Production-Administrators",
+      "entraGroup": "SRA-PROD-Production-Administrators",
       "permissionSet": "AdministratorAccess",
       "accountIds": ["REPLACE_WITH_PRODUCTION_ACCOUNT_ID"]
     }

@@ -42,13 +42,13 @@ variable "group_description" {
 variable "administrator_group_display_name" {
   description = "Display name for the production administrator Entra security group."
   type        = string
-  default     = "AWS-Production-Administrators"
+  default     = "SRA-PROD-Production-Administrators"
 }
 
 variable "administrator_group_mail_nickname" {
   description = "Mail nickname for the production administrator Entra security group."
   type        = string
-  default     = "aws-production-administrators"
+  default     = "sra-prod-production-administrators"
 }
 
 variable "administrator_group_description" {

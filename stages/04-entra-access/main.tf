@@ -44,3 +44,15 @@ check "administrator_group_is_security_enabled" {
     error_message = "The production administrator group must be a non-mail-enabled Entra security group for SCIM provisioning."
   }
 }
+
+check "group_names_use_sra_prod_prefix" {
+  assert {
+    condition = (
+      startswith(local.group_display_name, "SRA-PROD-") &&
+      startswith(local.group_mail_nickname, "sra-prod-") &&
+      startswith(var.administrator_group_display_name, "SRA-PROD-") &&
+      startswith(lower(var.administrator_group_mail_nickname), "sra-prod-")
+    )
+    error_message = "All Terraform-managed Entra groups must use the SRA-PROD- prefix."
+  }
+}

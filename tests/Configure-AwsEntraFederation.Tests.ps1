@@ -86,7 +86,10 @@ Describe 'Federation configuration examples' {
         $config.entra | Should -Not -BeNullOrEmpty
         @($config.accessMappings).Count | Should -BeGreaterThan 0
         @($config.accessMappings | Where-Object permissionSet -eq 'AdministratorAccess').Count | Should -Be 1
-        @($config.accessMappings | Where-Object entraGroup -eq 'AWS-Production-Administrators').Count | Should -Be 1
+        @($config.accessMappings | Where-Object entraGroup -eq 'SRA-PROD-Production-Administrators').Count | Should -Be 1
+        foreach ($mapping in @($config.accessMappings)) {
+            $mapping.entraGroup | Should -Match '^SRA-PROD-'
+        }
     }
 
     It 'does not include a SCIM token or private key' {

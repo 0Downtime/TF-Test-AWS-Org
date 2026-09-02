@@ -251,7 +251,7 @@ aws sts get-caller-identity --profile <managed-profile>
 
 ### Production administrator group
 
-The same Entra stage creates `AWS-Production-Administrators`, a separate non-mail-enabled security group mapped to the AWS `AdministratorAccess` permission set. Set its membership through the company's existing access-control solution; this repository does not configure PIM. Target the mapping to the production account ID rather than `all-active-accounts` unless full administration across every active account is intended. Do not use this group for routine access when `SecurityAudit` or `SecretsManagerAdminReadOnly` is sufficient.
+The same Entra stage creates `SRA-PROD-Production-Administrators`, a separate non-mail-enabled security group mapped to the AWS `AdministratorAccess` permission set. All federation groups use the `SRA-PROD-` prefix. Set membership through the company's existing access-control solution; this repository does not configure PIM. Target the mapping to the production account ID rather than `all-active-accounts` unless full administration across every active account is intended. Do not use this group for routine access when `SecurityAudit` or `SecretsManagerAdminReadOnly` is sufficient.
 
 Replace the example mapping's `REPLACE_WITH_PRODUCTION_ACCOUNT_ID` value with the real production account ID in the ignored local federation configuration before running Apply.
 

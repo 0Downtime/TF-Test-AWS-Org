@@ -75,6 +75,9 @@ function Read-FederationConfig {
         Assert-ValuePresent -Name 'accessMappings[].name' -Value $mappingName
         Assert-ValuePresent -Name "accessMappings[$mappingName].entraGroup" -Value $groupName
         Assert-ValuePresent -Name "accessMappings[$mappingName].permissionSet" -Value $permissionSet
+        if (-not $groupName.StartsWith('SRA-PROD-', [StringComparison]::OrdinalIgnoreCase)) {
+            throw "Access mapping '$mappingName' group '$groupName' must use the SRA-PROD- prefix."
+        }
         if (-not $seenMappingNames.Add($mappingName)) {
             throw "Duplicate access mapping name '$mappingName'."
         }
