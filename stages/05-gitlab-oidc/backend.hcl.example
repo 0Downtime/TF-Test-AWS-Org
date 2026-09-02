@@ -1,5 +1,5 @@
 bucket         = "replace-with-the-state-bucket"
 key            = "gitlab-oidc/terraform.tfstate"
 region         = "us-east-1"
-dynamodb_table = "replace-with-the-lock-table-if-used"
+use_lockfile   = true
 encrypt        = true

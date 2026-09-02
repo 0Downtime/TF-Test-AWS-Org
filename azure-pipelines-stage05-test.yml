@@ -1,0 +1,62 @@
+name: aws-stage05-test-$(Date:yyyyMMdd)$(Rev:.r)
+
+trigger: none
+pr: none
+
+parameters:
+- name: aws_service_connection
+  displayName: AWS OIDC service connection
+  type: string
+  default: aws-terraform-oidc
+- name: aws_region
+  displayName: AWS region
+  type: string
+  default: us-east-1
+
+# This pipeline deliberately plans only stage 05. It is intended for a
+# non-production bootstrap/test target when the sequential 01-05 pipeline's
+# earlier-stage secure files are not yet available. It has no apply job.
+stages:
+- stage: Validate
+  displayName: Validate Terraform configuration
+  jobs:
+  - job: ValidateTerraform
+    displayName: Format and validate stages 01-05
+    pool:
+      vmImage: ubuntu-latest
+    steps:
+    - checkout: self
+
+    - task: TerraformInstaller@1
+      displayName: Install Terraform
+      inputs:
+        terraformVersion: '1.10.5'
+
+    - bash: |
+        set -euo pipefail
+        terraform version
+        terraform fmt -check -recursive
+        bash "$BUILD_SOURCESDIRECTORY/scripts/ci/terraform-stage.sh" validate 05-gitlab-oidc
+      displayName: Terraform formatting and stage 05 validation
+      env:
+        AWS_PROFILE: ''
+        AWS_DEFAULT_PROFILE: ''
+        AWS_EC2_METADATA_DISABLED: 'true'
+        AWS_ACCESS_KEY_ID: ci-validation
+        AWS_SECRET_ACCESS_KEY: ci-validation
+        AWS_SESSION_TOKEN: ci-validation
+
+- stage: StageFivePlan
+  displayName: Plan stage 05 GitLab OIDC test
+  dependsOn: Validate
+  condition: succeeded()
+  jobs:
+  - template: pipelines/terraform-plan-job.yml
+    parameters:
+      job_name: Plan05GitLabOidcTest
+      display_name: Plan stage 05 GitLab OIDC test
+      stage_name: 05-gitlab-oidc
+      backend_secure_file: aws-terraform-05-gitlab-oidc.backend.hcl
+      tfvars_secure_file: aws-terraform-05-gitlab-oidc.tfvars
+      aws_service_connection: ${{ parameters.aws_service_connection }}
+      aws_region: ${{ parameters.aws_region }}
