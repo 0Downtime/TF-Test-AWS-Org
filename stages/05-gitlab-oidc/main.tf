@@ -60,11 +60,50 @@ resource "aws_cloudfront_origin_access_control" "oidc_metadata" {
   signing_protocol                  = "sigv4"
 }
 
+resource "aws_wafv2_web_acl" "oidc_metadata" {
+  name        = "${var.metadata_bucket_name}-waf"
+  description = "AWS WAF protection for the public GitLab OIDC metadata distribution"
+  scope       = "CLOUDFRONT"
+
+  default_action {
+    allow {}
+  }
+
+  rule {
+    name     = "AWSManagedRulesCommonRuleSet"
+    priority = 0
+
+    override_action {
+      none {}
+    }
+
+    statement {
+      managed_rule_group_statement {
+        name        = "AWSManagedRulesCommonRuleSet"
+        vendor_name = "AWS"
+      }
+    }
+
+    visibility_config {
+      cloudwatch_metrics_enabled = true
+      metric_name                = "GitLabOidcCommonRules"
+      sampled_requests_enabled   = true
+    }
+  }
+
+  visibility_config {
+    cloudwatch_metrics_enabled = true
+    metric_name                = "GitLabOidcWebAcl"
+    sampled_requests_enabled   = true
+  }
+}
+
 resource "aws_cloudfront_distribution" "oidc_metadata" {
   enabled         = true
   comment         = "Public GitLab OIDC discovery and JWKS metadata"
   is_ipv6_enabled = true
   price_class     = var.cloudfront_price_class
+  web_acl_id      = aws_wafv2_web_acl.oidc_metadata.arn
 
   lifecycle {
     prevent_destroy = true
